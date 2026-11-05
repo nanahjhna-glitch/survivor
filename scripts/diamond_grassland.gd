@@ -171,7 +171,7 @@ func _build_field() -> void:
 	var diamond_mesh := _create_diamond_ground_mesh()
 	floor_mesh.mesh = diamond_mesh
 	var grass_material := StandardMaterial3D.new()
-	grass_material.albedo_color = Color("#76b95e")
+	grass_material.albedo_color = Color("#5fa84a")
 	grass_material.roughness = 1.0
 	floor_mesh.material_override = grass_material
 	floor_body.add_child(floor_mesh)
