@@ -15,18 +15,18 @@ const CHARACTERS := [
 		{
 			"scene": "res://assets/characters/char01/Model/char01.fbx",
 			"scale": 1.0,
-			"forward_rotation_degrees": 180.0,
+			"forward_rotation_degrees": 0.0,
 			"texture": "res://assets/characters/char01/Animations/FighterTexture.png",
 			"animations":
 			{
 				"walk":
 				{
-					"scene": "res://assets/characters/char01/Animations/Walking.fbx",
+					"scene": "res://assets/characters/char01/Animations/Sprint.fbx",
 					"clip": "mixamo_com",
 				},
 				"idle":
 				{
-					"scene": "res://assets/characters/char01/Animations/Walking.fbx",
+					"scene": "res://assets/characters/char01/Animations/Fighting Idle.fbx",
 					"clip": "mixamo_com",
 				},
 				"run":
@@ -47,27 +47,27 @@ const CHARACTERS := [
 				"attack":
 				{
 					"scene": "res://assets/characters/char01/Animations/Boxing.fbx",
-					"clip": "Boxing",
+					"clip": "mixamo_com",
 				},
 				"skill_1":
 				{
 					"scene": "res://assets/characters/char01/Animations/Boxing.fbx",
-					"clip": "Boxing",
+					"clip": "mixamo_com",
 				},
 				"skill_2":
 				{
 					"scene": "res://assets/characters/char01/Animations/Upward Thrust.fbx",
-					"clip": "Upward Thrust",
+					"clip": "mixamo_com",
 				},
 				"skill_3":
 				{
 					"scene": "res://assets/characters/char01/Animations/Hurricane Kick.fbx",
-					"clip": "Hurricane Kick",
+					"clip": "mixamo_com",
 				},
 				"skill_4":
 				{
 					"scene": "res://assets/characters/char01/Animations/Martelo 2.fbx",
-					"clip": "Martelo 2",
+					"clip": "mixamo_com",
 				},
 			},
 		},
