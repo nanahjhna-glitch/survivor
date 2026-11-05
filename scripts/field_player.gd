@@ -220,7 +220,7 @@ func _load_character_animations(animation_paths: Dictionary) -> void:
 			animation_scene.free()
 			continue
 		var animation := source_player.get_animation(animation_name).duplicate(true)
-		if animation_id == "walk" or animation_id == "run":
+		if animation_id == "walk" or animation_id == "run" or animation_id == "idle":
 			animation.loop_mode = Animation.LOOP_LINEAR
 		else:
 			animation.loop_mode = Animation.LOOP_NONE

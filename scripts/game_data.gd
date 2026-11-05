@@ -24,6 +24,26 @@ const CHARACTERS := [
 					"scene": "res://assets/characters/char01/Animations/Walking.fbx",
 					"clip": "mixamo_com",
 				},
+				"idle":
+				{
+					"scene": "res://assets/characters/char01/Animations/Walking.fbx",
+					"clip": "mixamo_com",
+				},
+				"run":
+				{
+					"scene": "res://assets/characters/char01/Animations/Walking.fbx",
+					"clip": "mixamo_com",
+				},
+				"hit":
+				{
+					"scene": "res://assets/characters/char01/Animations/Boxing.fbx",
+					"clip": "mixamo_com",
+				},
+				"death":
+				{
+					"scene": "res://assets/characters/char01/Animations/Boxing.fbx",
+					"clip": "mixamo_com",
+				},
 				"attack":
 				{
 					"scene": "res://assets/characters/char01/Animations/Boxing.fbx",
