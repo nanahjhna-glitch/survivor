@@ -72,7 +72,8 @@ func _process(delta: float) -> void:
 		if skill_cast_remaining == 0.0:
 			_execute_skill(casting_skill_index)
 			casting_skill_index = -1
-	_auto_cast_combat(delta)
+	# 자동 공격/스킬 비활성화: 수동 입력으로만 사용
+	# _auto_cast_combat(delta)
 	if spawn_clock >= 2.8 and alive_monsters.size() < MAX_MONSTERS:
 		spawn_clock = 0.0
 		_spawn_monster()
