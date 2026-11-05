@@ -622,6 +622,13 @@ func _update_movement_animation(delta: float) -> void:
 				if animation_playback_speed <= 0.1:
 					model_animation_player.stop(false)
 					current_model_animation = ""
+		# idle 클립이 없을 때 기본 포즈를 위해 walk 첫 프레임을 정지 재생
+		if (
+			model_animation_player != null
+			and not model_animation_player.is_playing()
+			and _has_character_animation("walk")
+		):
+			play_character_animation("walk", 0.0)
 		if legs.size() >= 2:
 			legs[0].rotation.x = move_toward(legs[0].rotation.x, 0.0, delta * 4.0)
 			legs[1].rotation.x = move_toward(legs[1].rotation.x, 0.0, delta * 4.0)
