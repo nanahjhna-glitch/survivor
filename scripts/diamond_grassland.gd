@@ -146,8 +146,8 @@ func _build_environment() -> void:
 	var sky_material := ProceduralSkyMaterial.new()
 	sky_material.sky_top_color = Color("#58a8e8")
 	sky_material.sky_horizon_color = Color("#d5efff")
-	sky_material.ground_bottom_color = Color("#6a8759")
-	sky_material.ground_horizon_color = Color("#bedba4")
+	sky_material.ground_bottom_color = Color("#58a8e8")
+	sky_material.ground_horizon_color = Color("#d5efff")
 	sky.sky_material = sky_material
 	environment.sky = sky
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
