@@ -22,7 +22,7 @@ const CHARACTERS := [
 				"walk":
 				{
 					"scene": "res://assets/characters/char01/Animations/Walking.fbx",
-					"clip": "Walking",
+					"clip": "mixamo.com",
 				},
 				"attack":
 				{
