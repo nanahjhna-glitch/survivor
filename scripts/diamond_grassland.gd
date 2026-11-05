@@ -133,7 +133,7 @@ func _update_keyboard_movement() -> void:
 	camera_right = camera_right.normalized()
 	var world_direction := camera_right * screen_direction.x
 	world_direction += camera_forward * -screen_direction.y
-	var direction := Vector2(world_direction.x, world_direction.z).limit_length(1.0)
+	var direction := Vector2(-world_direction.x, -world_direction.z).limit_length(1.0)
 	running = run_button_held or Input.is_key_pressed(KEY_SHIFT)
 	player.set_controls(direction, running)
 
