@@ -11,9 +11,15 @@ config_version=5
 [application]
 
 config/name="survivor"
+run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 config/icon="res://icon.svg"
-run/main_scene="res://scenes/main_menu.tscn"
+
+[autoload]
+
+GameData="*res://scripts/game_data.gd"
+GameAudio="*res://scripts/game_audio.gd"
+ScreenRouter="*res://scripts/screen_router.gd"
 
 [display]
 
@@ -21,9 +27,9 @@ window/size/viewport_width=720
 window/size/viewport_height=1280
 window/size/window_width_override=720
 window/size/window_height_override=1280
-window/handheld/orientation=1
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+window/handheld/orientation=1
 
 [physics]
 
@@ -34,9 +40,3 @@ common/physics_interpolation=true
 
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method="mobile"
-
-[autoload]
-
-GameData="*res://scripts/game_data.gd"
-GameAudio="*res://scripts/game_audio.gd"
-ScreenRouter="*res://scripts/screen_router.gd"

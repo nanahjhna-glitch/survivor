@@ -111,34 +111,44 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_4:
 			_on_skill_pressed(3)
 
-
 func _update_keyboard_movement() -> void:
 	if player == null or player.dead or paused:
 		return
+
 	var keyboard_direction := Vector2(
 		(
 			float(Input.is_physical_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT))
 			- float(Input.is_physical_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT))
 		),
 		(
-			float(Input.is_physical_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN))
-			- float(Input.is_physical_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP))
+			# [수정 1] W(위)를 누를 때 앞으로 가도록 W - S 순서로 변경합니다.
+			float(Input.is_physical_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP))
+			- float(Input.is_physical_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN))
 		)
 	)
+
 	var joystick_direction: Vector2 = joystick.direction
 	var screen_direction := (keyboard_direction + joystick_direction).limit_length(1.0)
+
 	var camera_forward := -camera.global_transform.basis.z
 	camera_forward.y = 0.0
 	camera_forward = camera_forward.normalized()
+
 	var camera_right := camera.global_transform.basis.x
 	camera_right.y = 0.0
 	camera_right = camera_right.normalized()
+
 	var world_direction := camera_right * screen_direction.x
-	world_direction += camera_forward * -screen_direction.y
-	var direction := Vector2(-world_direction.x, -world_direction.z).limit_length(1.0)
+	# [수정 2] -screen_direction.y 에서 마이너스(-)를 제거하여 전진 방향을 바로잡습니다.
+	world_direction += camera_forward * screen_direction.y
+
+	var direction := Vector2(
+		world_direction.x,
+		world_direction.z
+	).limit_length(1.0)
+
 	running = run_button_held or Input.is_key_pressed(KEY_SHIFT)
 	player.set_controls(direction, running)
-
 
 func _build_environment() -> void:
 	var environment_node := WorldEnvironment.new()
@@ -397,7 +407,10 @@ func _spawn_player() -> void:
 	player = PlayerScript.new()
 	player.name = "Player"
 	player.setup(self, GameData.CHARACTERS[GameData.selected_character])
-	player.position = Vector3.ZERO
+	# 기존 코드
+	# player.position = Vector3.ZERO
+	# 변경 코드 (Y축을 1.0만큼 공중으로 띄움)
+	player.position = Vector3(0.0, 1.0, 0.0)
 	player.health_changed.connect(_on_health_changed)
 	player.experience_changed.connect(_on_experience_changed)
 	player.level_changed.connect(_on_level_changed)

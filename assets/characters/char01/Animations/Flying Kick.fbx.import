@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://cuhf02qbsu3ql"
-path="res://.godot/imported/Walking.fbx-b3b31fa14202b82c6bbb2c95b2d8cd8e.scn"
+uid="uid://cx4mhwhvsi0"
+path="res://.godot/imported/Flying Kick.fbx-99d3e395f313c873a3dadcf9b1f8b1f3.scn"
 
 [deps]
 
-source_file="res://assets/characters/char01/Animations/Walking.fbx"
-dest_files=["res://.godot/imported/Walking.fbx-b3b31fa14202b82c6bbb2c95b2d8cd8e.scn"]
+source_file="res://assets/characters/char01/Animations/Flying Kick.fbx"
+dest_files=["res://.godot/imported/Flying Kick.fbx-99d3e395f313c873a3dadcf9b1f8b1f3.scn"]
 
 [params]
 

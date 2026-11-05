@@ -220,6 +220,7 @@ func _load_character_animations(animation_paths: Dictionary) -> void:
 			animation_scene.free()
 			continue
 		var animation := source_player.get_animation(animation_name).duplicate(true)
+		_strip_root_motion_tracks(animation)
 		if animation_id == "walk" or animation_id == "run" or animation_id == "idle":
 			animation.loop_mode = Animation.LOOP_LINEAR
 		else:
@@ -248,6 +249,20 @@ func _load_character_animations(animation_paths: Dictionary) -> void:
 				push_error("캐릭터 애니메이션을 등록하지 못했습니다 (%s): %s" % [animation_id, error_string(error)])
 	if not _has_character_animation("walk"):
 		push_error("캐릭터에 걷기 애니메이션이 등록되지 않았습니다.")
+
+
+func _strip_root_motion_tracks(animation: Animation) -> void:
+	var tracks_to_remove: Array[int] = []
+	for track_index in range(animation.get_track_count()):
+		var track_path := str(animation.track_get_path(track_index))
+		if animation.track_get_type(track_index) != Animation.TYPE_POSITION_3D:
+			continue
+		# Bone pose positions contain the imported skeleton's bind/rest offsets.
+		if not track_path.contains("bone_pose/position"):
+			tracks_to_remove.append(track_index)
+	tracks_to_remove.reverse()
+	for track_index in tracks_to_remove:
+		animation.remove_track(track_index)
 
 
 func _select_imported_animation(
@@ -320,8 +335,8 @@ func _turn_toward(direction: Vector3, delta: float) -> void:
 	direction.y = 0.0
 	if direction.length_squared() <= 0.001:
 		return
-	var target_yaw := atan2(-direction.x, -direction.z)
-	rotation.y = rotate_toward(rotation.y, target_yaw, TURN_SPEED * delta)
+	var target_yaw := atan2(direction.x, direction.z)
+	rotation.y = target_yaw
 
 
 func _on_character_animation_finished(animation_name: StringName) -> void:

@@ -31,7 +31,7 @@ const CHARACTERS := [
 				},
 				"run":
 				{
-					"scene": "res://assets/characters/char01/Animations/Walking.fbx",
+					"scene": "res://assets/characters/char01/Animations/Sprint.fbx",
 					"clip": "mixamo_com",
 				},
 				"hit":
@@ -51,12 +51,12 @@ const CHARACTERS := [
 				},
 				"skill_1":
 				{
-					"scene": "res://assets/characters/char01/Animations/Boxing.fbx",
+					"scene": "res://assets/characters/char01/Animations/Kicking.fbx",
 					"clip": "mixamo_com",
 				},
 				"skill_2":
 				{
-					"scene": "res://assets/characters/char01/Animations/Upward Thrust.fbx",
+					"scene": "res://assets/characters/char01/Animations/Flying Kick.fbx",
 					"clip": "mixamo_com",
 				},
 				"skill_3":
