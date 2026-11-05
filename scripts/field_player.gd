@@ -304,7 +304,8 @@ func play_character_animation(
 
 func play_skill_animation(animation_id: String, minimum_duration: float) -> float:
 	skill_animation_name = "character/%s" % animation_id
-	skill_movement_locked = true
+	# 스킬 사용 중에도 이동을 허용한다 (하체 걷기 애니메이션 적용).
+	skill_movement_locked = false
 	var animation_length := play_character_animation(animation_id, 1.0, 0.0)
 	skill_movement_lock_remaining = maxf(animation_length, minimum_duration)
 	action_animation_remaining = skill_movement_lock_remaining
@@ -593,6 +594,17 @@ func _update_movement_animation(delta: float) -> void:
 	)
 
 	if action_animation_remaining > 0.0:
+		# 공격/스킬 중에도 입력이 있으면 하체(legs) 걷기 모션을 적용한다.
+		var is_moving_now := input_direction.length_squared() > 0.01
+		if is_moving_now and legs.size() >= 2:
+			animation_clock += delta * 7.0 * animation_playback_speed
+			legs[0].rotation.x = sin(animation_clock) * 0.42
+			legs[1].rotation.x = -sin(animation_clock) * 0.42
+			visual_root.position.y = absf(sin(animation_clock)) * 0.07
+		elif legs.size() >= 2:
+			legs[0].rotation.x = move_toward(legs[0].rotation.x, 0.0, delta * 4.0)
+			legs[1].rotation.x = move_toward(legs[1].rotation.x, 0.0, delta * 4.0)
+			visual_root.position.y = move_toward(visual_root.position.y, 0.0, delta * 0.4)
 		return
 	if movement_animation_state == "idle":
 		if has_idle_animation:
