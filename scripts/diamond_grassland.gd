@@ -11,7 +11,7 @@ const MAX_MONSTERS := 12
 const FIELD_RADIUS := 26.0
 const SKILL_BUTTON_SIZE := Vector2(70, 70)
 const AUTO_ATTACK_SCAN_INTERVAL := 0.1
-const CAMERA_OFFSET := Vector3(2.4, 5.4, 6.8)
+const CAMERA_OFFSET := Vector3(0.0, 7.2, 5.6)
 const CAMERA_LOOK_HEIGHT := 1.15
 
 var player: FieldPlayer
@@ -479,10 +479,10 @@ func _build_hud() -> void:
 	combat_controls.anchor_top = 1.0
 	combat_controls.anchor_right = 1.0
 	combat_controls.anchor_bottom = 1.0
-	combat_controls.offset_left = -304
-	combat_controls.offset_top = -184
-	combat_controls.offset_right = -14
-	combat_controls.offset_bottom = -14
+	combat_controls.offset_left = -230
+	combat_controls.offset_top = -230
+	combat_controls.offset_right = -12
+	combat_controls.offset_bottom = -12
 	combat_controls.add_theme_constant_override("separation", 8)
 	combat_controls.alignment = BoxContainer.ALIGNMENT_END
 	combat_controls.add_theme_constant_override("alignment", BoxContainer.ALIGNMENT_END)
