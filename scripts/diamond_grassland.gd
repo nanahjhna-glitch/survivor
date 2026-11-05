@@ -173,7 +173,18 @@ func _build_field() -> void:
 	var grass_material := StandardMaterial3D.new()
 	grass_material.albedo_color = Color("#5fa84a")
 	grass_material.roughness = 1.0
+	grass_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	grass_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	floor_mesh.material_override = grass_material
+
+	# 바닥이 확실히 녹색으로 보이도록 넓은 평면 추가
+	var ground_plane := MeshInstance3D.new()
+	var plane_mesh := PlaneMesh.new()
+	plane_mesh.size = Vector2(FIELD_RADIUS * 4.0, FIELD_RADIUS * 4.0)
+	ground_plane.mesh = plane_mesh
+	ground_plane.material_override = grass_material
+	ground_plane.position.y = -0.35
+	add_child(ground_plane)
 	floor_body.add_child(floor_mesh)
 	var floor_collider := CollisionShape3D.new()
 	floor_collider.shape = diamond_mesh.create_trimesh_shape()
