@@ -35,6 +35,8 @@ var skill_cast_remaining := 0.0
 var elapsed_time := 0.0
 var spawn_clock := 0.0
 var auto_attack_scan_timer := 0.0
+var auto_cast_enabled := false
+var auto_cast_button: Button
 var running := false
 var run_button_held := false
 var paused := false
@@ -72,8 +74,8 @@ func _process(delta: float) -> void:
 		if skill_cast_remaining == 0.0:
 			_execute_skill(casting_skill_index)
 			casting_skill_index = -1
-	# 자동 공격/스킬 비활성화: 수동 입력으로만 사용
-	# _auto_cast_combat(delta)
+	if auto_cast_enabled:
+		_auto_cast_combat(delta)
 	if spawn_clock >= 2.8 and alive_monsters.size() < MAX_MONSTERS:
 		spawn_clock = 0.0
 		_spawn_monster()
@@ -507,6 +509,17 @@ func _build_hud() -> void:
 		skill_buttons.append(button)
 		skill_grid.add_child(button)
 
+	auto_cast_button = _make_hud_button("자동: OFF", Vector2(88, 46))
+	auto_cast_button.anchor_left = 1.0
+	auto_cast_button.anchor_right = 1.0
+	auto_cast_button.offset_left = -100
+	auto_cast_button.offset_top = 180
+	auto_cast_button.offset_right = -12
+	auto_cast_button.offset_bottom = 226
+	auto_cast_button.add_theme_font_size_override("font_size", 13)
+	auto_cast_button.pressed.connect(_toggle_auto_cast)
+	root.add_child(auto_cast_button)
+
 	var pause_button := _make_hud_button("Ⅱ", Vector2(58, 52))
 	pause_button.anchor_left = 1.0
 	pause_button.anchor_right = 1.0
@@ -659,6 +672,12 @@ func perform_basic_attack(
 
 func _on_attack_pressed() -> void:
 	player.try_basic_attack()
+
+
+func _toggle_auto_cast() -> void:
+	auto_cast_enabled = not auto_cast_enabled
+	if auto_cast_button != null:
+		auto_cast_button.text = "자동: %s" % ("ON" if auto_cast_enabled else "OFF")
 
 
 func _on_skill_pressed(index: int) -> void:
