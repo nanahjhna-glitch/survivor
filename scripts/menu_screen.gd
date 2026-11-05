@@ -65,7 +65,7 @@ func _make_header() -> Control:
 	row.custom_minimum_size.y = 58
 	row.add_theme_constant_override("separation", 10)
 	if screen_id != "main_menu":
-		var back := _button("‹", false, 58)
+		var back := _button("‹", false, 42)
 		back.pressed.connect(_go_back)
 		row.add_child(back)
 	var title := _label(_screen_title(), 27, INK)
