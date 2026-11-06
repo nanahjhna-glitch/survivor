@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://dhdf5fhd040hj"
-path="res://.godot/imported/Ready Idle.fbx-b4781912dca4614714d6e9d49aa81c84.scn"
+uid="uid://birmv1ie0tmp8"
+path="res://.godot/imported/Quad Punch.fbx-10688edb64ffccbcf152bf142723f083.scn"
 
 [deps]
 
-source_file="res://assets/characters/char02/Animations/Ready Idle.fbx"
-dest_files=["res://.godot/imported/Ready Idle.fbx-b4781912dca4614714d6e9d49aa81c84.scn"]
+source_file="res://assets/characters/char02/Animations/Quad Punch.fbx"
+dest_files=["res://.godot/imported/Quad Punch.fbx-10688edb64ffccbcf152bf142723f083.scn"]
 
 [params]
 

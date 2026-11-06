@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://cf076fy48gksj"
-path="res://.godot/imported/Leg Sweep.fbx-93ce580d6976514b22ebe48e111c03cf.scn"
+uid="uid://xva3skc4a4gw"
+path="res://.godot/imported/Fighting Idle.fbx-c104f2f0271a3196ebbba74b7d890bf0.scn"
 
 [deps]
 
-source_file="res://assets/characters/char02/Animations/Leg Sweep.fbx"
-dest_files=["res://.godot/imported/Leg Sweep.fbx-93ce580d6976514b22ebe48e111c03cf.scn"]
+source_file="res://assets/characters/char02/Animations/Fighting Idle.fbx"
+dest_files=["res://.godot/imported/Fighting Idle.fbx-c104f2f0271a3196ebbba74b7d890bf0.scn"]
 
 [params]
 

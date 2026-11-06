@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://ctvqbrijp07ai"
-path="res://.godot/imported/Fireball.fbx-877ce127b430e000b8197b2f3b5d661c.scn"
+uid="uid://bbctnjoc1r6uj"
+path="res://.godot/imported/Flying Kick.fbx-19bd09f331fa4f4fbb723c993204c32a.scn"
 
 [deps]
 
-source_file="res://assets/characters/char02/Animations/Fireball.fbx"
-dest_files=["res://.godot/imported/Fireball.fbx-877ce127b430e000b8197b2f3b5d661c.scn"]
+source_file="res://assets/characters/char02/Animations/Flying Kick.fbx"
+dest_files=["res://.godot/imported/Flying Kick.fbx-19bd09f331fa4f4fbb723c993204c32a.scn"]
 
 [params]
 

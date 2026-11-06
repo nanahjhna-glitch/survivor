@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://da8gaeiv1ek41"
-path="res://.godot/imported/Uppercut Jab.fbx-81b1a396f2abaed5a91a0a9a358b4f12.scn"
+uid="uid://bgsgxv3n5mhio"
+path="res://.godot/imported/Standing Dive Forward.fbx-4429ed0a20a3b09cdfc5368b0cb42bd0.scn"
 
 [deps]
 
-source_file="res://assets/characters/char02/Animations/Uppercut Jab.fbx"
-dest_files=["res://.godot/imported/Uppercut Jab.fbx-81b1a396f2abaed5a91a0a9a358b4f12.scn"]
+source_file="res://assets/characters/char02/Animations/Standing Dive Forward.fbx"
+dest_files=["res://.godot/imported/Standing Dive Forward.fbx-4429ed0a20a3b09cdfc5368b0cb42bd0.scn"]
 
 [params]
 

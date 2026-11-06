@@ -3,7 +3,7 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://cl1mwub71vrlf"
+uid="uid://cygeqp53extv1"
 path="res://.godot/imported/char02.fbx-8a6e8e03f2254686fcecc49dadcebdac.scn"
 
 [deps]
@@ -36,11 +36,11 @@ animation/trimming=true
 animation/remove_immutable_tracks=true
 animation/import_rest_as_RESET=false
 import_script/path=""
-materials/extract=1
+materials/extract=0
 materials/extract_format=0
-materials/extract_path="res://assets/characters/char02/Model/"
+materials/extract_path=""
 _subresources={}
 fbx/importer=0
 fbx/allow_geometry_helper_nodes=false
-fbx/embedded_image_handling=2
+fbx/embedded_image_handling=1
 fbx/naming_version=2

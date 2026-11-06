@@ -83,61 +83,61 @@ const CHARACTERS := [
 		"attributes": {"STR": 4, "AGI": 5, "VIT": 4, "INT": 2, "DEX": 4, "LUK": 3},
 		"visual":
 		{
-			"scene": "res://assets/characters/char02/Model/char02.fbx",
+			"scene": "res://assets/characters/char02/Animations/T-Pose.fbx",
 			"scale": 1.0,
 			"forward_rotation_degrees": 0.0,
-			
+			"texture": "res://assets/characters/char02/Animations/Texture.png",
 			"animations":
 			{
 				"walk":
 				{
-					"scene": "res://assets/characters/char02/Animations/Ready Idle.fbx",
-					"clip": "mixamo_com",
+					"scene": "res://assets/characters/char01/Animations/Sprint.fbx",
+					"clip": "mixamo",
 				},
 				"idle":
 				{
-					"scene": "res://assets/characters/char02/Animations/Ready Idle.fbx",
-					"clip": "mixamo_com",
+					"scene": "res://assets/characters/char02/Animations/Fighting Idle.fbx",
+					"clip": "mixamo",
 				},
 				"run":
 				{
-					"scene": "res://assets/characters/char02/Animations/Ready Idle.fbx",
-					"clip": "mixamo_com",
+					"scene": "res://assets/characters/char01/Animations/Sprint.fbx",
+					"clip": "mixamo",
 				},
 				"hit":
 				{
-					"scene": "res://assets/characters/char02/Animations/Uppercut Jab.fbx",
-					"clip": "mixamo_com",
+					"scene": "res://assets/characters/char02/Animations/Quad Punch.fbx",
+					"clip": "mixamo",
 				},
 				"death":
 				{
 					"scene": "res://assets/characters/char02/Animations/Dying.fbx",
-					"clip": "mixamo_com",
+					"clip": "mixamo",
 				},
 				"attack":
 				{
-					"scene": "res://assets/characters/char02/Animations/Uppercut Jab.fbx",
-					"clip": "mixamo_com",
+					"scene": "res://assets/characters/char02/Animations/Quad Punch.fbx",
+					"clip": "mixamo",
 				},
 				"skill_1":
 				{
-					"scene": "res://assets/characters/char02/Animations/Leg Sweep.fbx",
-					"clip": "mixamo_com",
+					"scene": "res://assets/characters/char02/Animations/Flying Kick.fbx",
+					"clip": "mixamo",
 				},
 				"skill_2":
 				{
 					"scene": "res://assets/characters/char02/Animations/Roundhouse Kick.fbx",
-					"clip": "mixamo_com",
+					"clip": "mixamo",
 				},
 				"skill_3":
 				{
 					"scene": "res://assets/characters/char02/Animations/Hurricane Kick.fbx",
-					"clip": "mixamo_com",
+					"clip": "mixamo",
 				},
 				"skill_4":
 				{
-					"scene": "res://assets/characters/char02/Animations/Fireball.fbx",
-					"clip": "mixamo_com",
+					"scene": "res://assets/characters/char02/Animations/Standing Dive Forward.fbx",
+					"clip": "mixamo",
 				},
 			},
 		},
