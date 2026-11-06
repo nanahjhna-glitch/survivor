@@ -268,6 +268,7 @@ func _build_field() -> void:
 			and Vector2(flower_position.x, flower_position.z).length() > 4.0
 		):
 			_add_flower(flower_position)
+	_build_voxel_forest_decorations()
 
 
 func _create_diamond_ground_mesh() -> ArrayMesh:
@@ -413,6 +414,75 @@ func _add_flower(at: Vector3) -> void:
 	flower.material_override = material
 	add_child(flower)
 
+
+func _build_voxel_forest_decorations() -> void:
+	var base := "res://assets/field/Voxel_Animal_Asset_Pack/Main/Green/"
+	var tree_paths := [base + "tree1/tree.vox.obj", base + "tree2/tree2.vox.obj"]
+	var grass_paths := [
+		base + "grass1/grass1.vox.obj",
+		base + "grass2/grass2.vox.obj",
+		base + "grass3/grass3.vox.obj",
+	]
+	var flower_paths := [
+		base + "grassflower1/grassflower1.vox.obj",
+		base + "grassflower2/grassflower2.vox.obj",
+	]
+	var mushroom_path := base + "grassmushroom/grassmushroom.vox.obj"
+	var box_paths := [base + "box1/box1.vox.obj", base + "box2/box2.vox.obj"]
+
+	# 경계 근처에 나무 배치
+	for i in range(18):
+		var angle := TAU * float(i) / 18.0 + random.randf_range(-0.15, 0.15)
+		var dist := random.randf_range(FIELD_RADIUS - 6.0, FIELD_RADIUS - 2.0)
+		var pos := Vector3(cos(angle) * dist, 0.0, sin(angle) * dist)
+		var path: String = tree_paths[random.randi_range(0, tree_paths.size() - 1)]
+		_add_voxel_decoration(path, pos, Vector3.ONE * random.randf_range(0.9, 1.2), random.randf_range(0.0, TAU))
+
+	# 잔디/꽃 산포
+	for i in range(60):
+		var p := Vector3(random.randf_range(-20.0, 20.0), 0.0, random.randf_range(-20.0, 20.0))
+		if absf(p.x) + absf(p.z) >= FIELD_RADIUS - 1.0:
+			continue
+		if Vector2(p.x, p.z).length() < 3.0:
+			continue
+		var pool := grass_paths if random.randf() < 0.6 else flower_paths
+		var path: String = pool[random.randi_range(0, pool.size() - 1)]
+		_add_voxel_decoration(path, p, Vector3.ONE * random.randf_range(0.8, 1.1), random.randf_range(0.0, TAU))
+
+	# 버섯 소수 배치
+	for i in range(8):
+		var p := Vector3(random.randf_range(-18.0, 18.0), 0.0, random.randf_range(-18.0, 18.0))
+		if absf(p.x) + absf(p.z) >= FIELD_RADIUS - 2.0:
+			continue
+		_add_voxel_decoration(mushroom_path, p, Vector3.ONE * random.randf_range(0.9, 1.1), random.randf_range(0.0, TAU))
+
+	# 상자 소품
+	for i in range(4):
+		var p := Vector3(random.randf_range(-12.0, 12.0), 0.0, random.randf_range(-12.0, 12.0))
+		if absf(p.x) + absf(p.z) >= FIELD_RADIUS - 3.0:
+			continue
+		var path: String = box_paths[random.randi_range(0, box_paths.size() - 1)]
+		_add_voxel_decoration(path, p, Vector3.ONE * 0.9, random.randf_range(0.0, TAU))
+
+func _add_voxel_decoration(path: String, position: Vector3, scale: Vector3, yaw: float) -> void:
+	var mesh_resource := load(path)
+	if mesh_resource == null:
+		return
+	var instance := MeshInstance3D.new()
+	if mesh_resource is ArrayMesh:
+		instance.mesh = mesh_resource
+	elif mesh_resource is Mesh:
+		instance.mesh = mesh_resource
+	else:
+		var importer := mesh_resource as Resource
+		if importer != null and importer.has_method("get_mesh"):
+			instance.mesh = importer.call("get_mesh")
+	if instance.mesh == null:
+		return
+	instance.position = position
+	instance.scale = scale
+	instance.rotation.y = yaw
+	add_child(instance)
 
 func _box_mesh(at: Vector3, dimensions: Vector3, color: Color) -> MeshInstance3D:
 	var block := MeshInstance3D.new()
