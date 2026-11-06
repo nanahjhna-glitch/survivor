@@ -11,8 +11,13 @@ const MAX_MONSTERS := 12
 const FIELD_RADIUS := 26.0
 const SKILL_BUTTON_SIZE := Vector2(70, 70)
 const AUTO_ATTACK_SCAN_INTERVAL := 0.1
+const AUTO_SEARCH_RADIUS := 14.0
+const AUTO_GLOBAL_COOLDOWN := 0.25
+const AUTO_SKILL_PRIORITY: Array[int] = [3, 1, 2, 0]
 const CAMERA_OFFSET := Vector3(0.0, 7.2, 5.6)
 const CAMERA_LOOK_HEIGHT := 1.15
+
+enum AutoHuntState { SEARCH, APPROACH, CASTING, RECOVERY, SUSPENDED }
 
 var player: FieldPlayer
 var camera: Camera3D
@@ -35,8 +40,13 @@ var skill_cast_remaining := 0.0
 var elapsed_time := 0.0
 var spawn_clock := 0.0
 var auto_attack_scan_timer := 0.0
-var auto_cast_enabled := false
+var auto_cast_enabled := true
 var auto_cast_button: Button
+var auto_hunt_state := AutoHuntState.SEARCH
+var auto_hunt_target: FieldMonster
+var auto_target_mode := "nearest"
+var auto_hunt_gcd := 0.0
+var auto_hunt_move_direction := Vector3.ZERO
 var running := false
 var run_button_held := false
 var paused := false
@@ -76,6 +86,10 @@ func _process(delta: float) -> void:
 			casting_skill_index = -1
 	if auto_cast_enabled:
 		_auto_cast_combat(delta)
+	else:
+		auto_hunt_state = AutoHuntState.SEARCH
+		auto_hunt_target = null
+		auto_hunt_move_direction = Vector3.ZERO
 	if spawn_clock >= 2.8 and alive_monsters.size() < MAX_MONSTERS:
 		spawn_clock = 0.0
 		_spawn_monster()
@@ -129,6 +143,16 @@ func _update_keyboard_movement() -> void:
 
 	var joystick_direction: Vector2 = joystick.direction
 	var screen_direction := (keyboard_direction + joystick_direction).limit_length(1.0)
+	if (
+		auto_cast_enabled
+		and auto_hunt_state == AutoHuntState.APPROACH
+		and screen_direction.length_squared() <= 0.01
+		and auto_hunt_move_direction.length_squared() > 0.01
+	):
+		player.set_controls(
+			Vector2(auto_hunt_move_direction.x, auto_hunt_move_direction.z), true
+		)
+		return
 
 	var camera_forward := -camera.global_transform.basis.z
 	camera_forward.y = 0.0
@@ -456,11 +480,32 @@ func _build_hud() -> void:
 	gold_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.add_child(gold_label)
 	hp_bar = _make_bar(Color("#db6558"))
+	hp_bar.custom_minimum_size.x = 342
+	hp_bar.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	top.add_child(hp_bar)
 	exp_bar = _make_bar(Color("#55c6d1"))
+	exp_bar.custom_minimum_size = Vector2(20, 300)
+	exp_bar.fill_mode = ProgressBar.FILL_BOTTOM_TO_TOP
+	exp_bar.anchor_left = 0.0
+	exp_bar.anchor_top = 0.5
+	exp_bar.anchor_right = 0.0
+	exp_bar.anchor_bottom = 0.5
+	exp_bar.offset_left = 18
+	exp_bar.offset_top = -150
+	exp_bar.offset_right = 38
+	exp_bar.offset_bottom = 150
 	exp_label = _hud_label("", 14)
-	top.add_child(exp_label)
-	top.add_child(exp_bar)
+	exp_label.anchor_left = 0.0
+	exp_label.anchor_top = 0.5
+	exp_label.anchor_right = 0.0
+	exp_label.anchor_bottom = 0.5
+	exp_label.offset_left = 42
+	exp_label.offset_top = -168
+	exp_label.offset_right = 180
+	exp_label.offset_bottom = -142
+	exp_label.visible = false
+	root.add_child(exp_bar)
+	root.add_child(exp_label)
 
 	notification_label = _hud_label("", 23)
 	notification_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -487,26 +532,24 @@ func _build_hud() -> void:
 	run_button.button_up.connect(_set_running.bind(false))
 	root.add_child(run_button)
 
-	var combat_controls := HBoxContainer.new()
+	var combat_controls := VBoxContainer.new()
 	combat_controls.anchor_left = 1.0
-	combat_controls.anchor_top = 1.0
+	combat_controls.anchor_top = 0.5
 	combat_controls.anchor_right = 1.0
-	combat_controls.anchor_bottom = 1.0
-	combat_controls.offset_left = -230
-	combat_controls.offset_top = -230
+	combat_controls.anchor_bottom = 0.5
+	combat_controls.offset_left = -82
+	combat_controls.offset_top = -205
 	combat_controls.offset_right = -12
-	combat_controls.offset_bottom = -12
+	combat_controls.offset_bottom = 205
 	combat_controls.add_theme_constant_override("separation", 8)
-	combat_controls.alignment = BoxContainer.ALIGNMENT_END
-	combat_controls.add_theme_constant_override("alignment", BoxContainer.ALIGNMENT_END)
 	root.add_child(combat_controls)
 
-	attack_button = _make_hud_button("공격", Vector2(94, 94))
+	attack_button = _make_hud_button("공격", SKILL_BUTTON_SIZE)
 	attack_button.add_theme_font_size_override("font_size", 19)
 	attack_button.pressed.connect(_on_attack_pressed)
 	combat_controls.add_child(attack_button)
 	var skill_grid := GridContainer.new()
-	skill_grid.columns = 2
+	skill_grid.columns = 1
 	skill_grid.add_theme_constant_override("h_separation", 5)
 	skill_grid.add_theme_constant_override("v_separation", 5)
 	combat_controls.add_child(skill_grid)
@@ -522,13 +565,13 @@ func _build_hud() -> void:
 		skill_buttons.append(button)
 		skill_grid.add_child(button)
 
-	auto_cast_button = _make_hud_button("자동: OFF", Vector2(88, 46))
+	auto_cast_button = _make_hud_button("자동: ON", Vector2(88, 46))
 	auto_cast_button.anchor_left = 1.0
 	auto_cast_button.anchor_right = 1.0
 	auto_cast_button.offset_left = -100
-	auto_cast_button.offset_top = 180
+	auto_cast_button.offset_top = 0
 	auto_cast_button.offset_right = -12
-	auto_cast_button.offset_bottom = 226
+	auto_cast_button.offset_bottom = 46
 	auto_cast_button.add_theme_font_size_override("font_size", 13)
 	auto_cast_button.pressed.connect(_toggle_auto_cast)
 	root.add_child(auto_cast_button)
@@ -536,10 +579,10 @@ func _build_hud() -> void:
 	var pause_button := _make_hud_button("Ⅱ", Vector2(58, 52))
 	pause_button.anchor_left = 1.0
 	pause_button.anchor_right = 1.0
-	pause_button.offset_left = -72
-	pause_button.offset_top = 250
-	pause_button.offset_right = -14
-	pause_button.offset_bottom = 302
+	pause_button.offset_left = -160
+	pause_button.offset_top = 0
+	pause_button.offset_right = -108
+	pause_button.offset_bottom = 46
 	pause_button.pressed.connect(_toggle_pause)
 	root.add_child(pause_button)
 	minimap = MinimapScript.new()
@@ -547,9 +590,9 @@ func _build_hud() -> void:
 	minimap.anchor_left = 1.0
 	minimap.anchor_right = 1.0
 	minimap.offset_left = -158
-	minimap.offset_top = 94
+	minimap.offset_top = 52
 	minimap.offset_right = -12
-	minimap.offset_bottom = 240
+	minimap.offset_bottom = 198
 	minimap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(minimap)
 	_on_health_changed(player.health, player.max_health)
@@ -794,6 +837,11 @@ func _auto_cast_combat(delta: float) -> void:
 
 func _face_target(target: FieldMonster) -> void:
 	player.set_facing_target(target)
+	if target != null and is_instance_valid(target):
+		var dir := target.global_position - player.global_position
+		dir.y = 0.0
+		if dir.length_squared() > 0.001:
+			player.rotation.y = atan2(-dir.x, -dir.z)
 
 
 func _nearest_monster(origin: Vector3, range_value: float) -> FieldMonster:

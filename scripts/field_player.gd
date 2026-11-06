@@ -45,9 +45,15 @@ var attack_cooldown := 0.0
 var input_direction := Vector2.ZERO
 var running := false
 var dead := false
+var auto_hunt_disabled := false
+var stunned := false
+var frozen := false
+var silenced := false
+var auto_hunt_controller: AutoHuntController = null
 var invulnerability_time := 0.0
 var visual_root: Node3D
 var model_animation_player: AnimationPlayer
+var world_hp_fill: MeshInstance3D
 var current_model_animation := ""
 var action_animation_remaining := 0.0
 var skill_movement_locked := false
@@ -92,6 +98,10 @@ func setup(game: Node3D, character: Dictionary) -> void:
 	casting_time_multiplier = clampf(1.0 - intelligence * 0.025 - dexterity * 0.02, 0.4, 1.0)
 	experience_magnet_range = BASE_EXPERIENCE_MAGNET_RANGE
 	random.randomize()
+	auto_hunt_controller = AutoHuntController.new()
+	auto_hunt_controller.setup(self, arena)
+	add_child(auto_hunt_controller)
+	health_changed.connect(_update_world_health_bar)
 	_build_body(character)
 	health_changed.emit(health, max_health)
 	experience_changed.emit(experience, next_level_experience)
@@ -110,6 +120,8 @@ func _ready() -> void:
 func _build_body(character: Dictionary) -> void:
 	visual_root = Node3D.new()
 	add_child(visual_root)
+	visual_root.scale = Vector3.ONE * 1.2
+	_build_world_health_bar()
 	if _build_model_visual(character):
 		return
 	var tunic_color: Color = character.get("color", Color("#59a9e8"))
@@ -136,6 +148,42 @@ func _build_body(character: Dictionary) -> void:
 			weapon = _add_block(
 				Vector3(0.49, 0.94, -0.05), Vector3(0.12, 0.82, 0.12), Color("#b9dbe1")
 			)
+
+
+func _build_world_health_bar() -> void:
+	var bar_root := Node3D.new()
+	bar_root.name = "WorldHealthBar"
+	bar_root.position = Vector3(0.0, 2.75, 0.0)
+	add_child(bar_root)
+	var background := MeshInstance3D.new()
+	var background_mesh := QuadMesh.new()
+	background_mesh.size = Vector2(1.05, 0.12)
+	background.mesh = background_mesh
+	var background_material := StandardMaterial3D.new()
+	background_material.albedo_color = Color("#202a31")
+	background_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	background_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	background.material_override = background_material
+	bar_root.add_child(background)
+	world_hp_fill = MeshInstance3D.new()
+	var fill_mesh := QuadMesh.new()
+	fill_mesh.size = Vector2(1.0, 0.08)
+	world_hp_fill.mesh = fill_mesh
+	var fill_material := StandardMaterial3D.new()
+	fill_material.albedo_color = Color("#db6558")
+	fill_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	fill_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	world_hp_fill.material_override = fill_material
+	bar_root.add_child(world_hp_fill)
+	_update_world_health_bar(health, max_health)
+
+
+func _update_world_health_bar(current: float, maximum: float) -> void:
+	if world_hp_fill == null or maximum <= 0.0:
+		return
+	var ratio := clampf(current / maximum, 0.0, 1.0)
+	world_hp_fill.scale = Vector3(maxf(ratio, 0.001), 1.0, 1.0)
+	world_hp_fill.position.x = -(1.0 - ratio) * 0.5
 
 
 func _build_model_visual(character: Dictionary) -> bool:
@@ -427,6 +475,10 @@ func set_controls(direction: Vector2, is_running: bool) -> void:
 	running = is_running
 
 
+func set_auto_hunt_disabled(disabled: bool) -> void:
+	auto_hunt_disabled = disabled
+
+
 func try_basic_attack() -> void:
 	if dead or attack_cooldown > 0.0 or action_animation_remaining > 0.0:
 		return
@@ -535,6 +587,11 @@ func _physics_process(delta: float) -> void:
 	elif action_animation_remaining <= 0.0:
 		facing_target = null
 	invulnerability_time = maxf(0.0, invulnerability_time - delta)
+	var arena_auto_cast := true
+	if arena != null and arena.has_method("get"):
+		arena_auto_cast = bool(arena.get("auto_cast_enabled"))
+	if auto_hunt_controller != null and input_direction == Vector2.ZERO and not auto_hunt_disabled and not arena_auto_cast:
+		auto_hunt_controller.update(delta)
 	regen_timer += delta
 	if regen_timer >= 1.0:
 		regen_timer -= 1.0
