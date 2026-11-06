@@ -228,29 +228,7 @@ func _build_field() -> void:
 	add_child(floor_body)
 	_add_diamond_boundary()
 
-	# 절차적 녹색 나무는 복셀 에셋으로 대체됨
-	for position in [
-		Vector3(-7, 0, 6),
-		Vector3(8, 0, -7),
-		Vector3(15, 0, 5),
-		Vector3(-18, 0, -5),
-		Vector3(5, 0, 19),
-		Vector3(-3, 0, -20),
-	]:
-		_add_rock(position)
-	for position in [
-		Vector3(0, 0, -13),
-		Vector3(3, 0, -14),
-		Vector3(1, 0, -11),
-		Vector3(12, 0, 12),
-		Vector3(14, 0, 11),
-		Vector3(13, 0, 14),
-		Vector3(-14, 0, 11),
-		Vector3(-12, 0, 13),
-	]:
-		_add_crystal(position)
-	# 절차적 녹색 꽃은 복셀 에셋으로 대체됨
-	_build_voxel_forest_decorations()
+	# 맵 오브젝트 모두 제거 (바닥과 빨간 테두리 선만 유지)
 
 
 func _create_diamond_ground_mesh() -> ArrayMesh:
@@ -283,11 +261,29 @@ func _add_diamond_boundary() -> void:
 		Vector3(-FIELD_RADIUS, 0, 0),
 	]
 	for index in range(corners.size()):
-		_add_boundary_wall(corners[index], corners[(index + 1) % corners.size()])
-		_add_boundary_marker(corners[index])
+		_add_boundary_line(corners[index], corners[(index + 1) % corners.size()])
 
 
-func _add_boundary_wall(start: Vector3, finish: Vector3) -> void:
+func _add_boundary_line(start: Vector3, finish: Vector3) -> void:
+	var edge := finish - start
+	var segment_length := edge.length()
+	var midpoint := (start + finish) * 0.5
+	var line := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(0.08, 0.08, segment_length)
+	line.mesh = box
+	line.position = midpoint + Vector3.UP * 0.05
+	line.rotation.y = atan2(edge.x, edge.z)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#ff3b30")
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.emission_enabled = true
+	material.emission = Color("#ff3b30")
+	material.emission_energy_multiplier = 0.6
+	line.material_override = material
+	add_child(line)
+
+func _add_boundary_wall_unused(start: Vector3, finish: Vector3) -> void:
 	var edge := finish - start
 	var segment_length := edge.length()
 	var midpoint := (start + finish) * 0.5
