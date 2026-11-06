@@ -86,6 +86,7 @@ const CHARACTERS := [
 			"scene": "res://assets/characters/char02/Model/char02.fbx",
 			"scale": 1.0,
 			"forward_rotation_degrees": 0.0,
+			
 			"animations":
 			{
 				"walk":
