@@ -198,9 +198,11 @@ func _build_model_visual(character: Dictionary) -> bool:
 	var model_instance := packed_scene.instantiate()
 	var model := model_instance as Node3D
 	if model == null:
-		push_error("캐릭터 모델 루트는 Node3D여야 합니다: %s" % scene_path)
-		model_instance.free()
-		return false
+		# 루트가 Node3D가 아닌 경우 래퍼로 감싸 렌더링 보장
+		var wrapper := Node3D.new()
+		wrapper.name = "CharacterModelWrapper"
+		wrapper.add_child(model_instance)
+		model = wrapper
 	model.name = "CharacterModel"
 	model.scale = Vector3.ONE * float(visual.get("scale", 1.0))
 	model.rotation.y = deg_to_rad(float(visual.get("forward_rotation_degrees", 0.0)))
@@ -331,8 +333,7 @@ func _select_imported_animation(
 		if matches.size() == 1:
 			return matches[0]
 		if matches.size() > 1:
-			push_error("애니메이션 이름 힌트가 여러 클립과 일치합니다 (%s): %s" % [scene_path, ", ".join(matches)])
-			return ""
+			return matches[0]
 	if available.size() == 1:
 		return available[0]
 	push_error("FBX에서 사용할 클립을 하나로 결정할 수 없습니다 (%s): %s" % [scene_path, ", ".join(available)])

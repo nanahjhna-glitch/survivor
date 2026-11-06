@@ -74,6 +74,75 @@ const CHARACTERS := [
 		"color": Color("#59a9e8"),
 	},
 	{
+		"name": "무도가",
+		"title": "빠르고 강력한 격투가",
+		"weapon": "강철 건틀릿",
+		"passive": "공격 속도 +10%",
+		"stats": [70, 80, 60],
+		"attack_style": "melee",
+		"attributes": {"STR": 4, "AGI": 5, "VIT": 4, "INT": 2, "DEX": 4, "LUK": 3},
+		"visual":
+		{
+			"scene": "res://assets/characters/char02/Model/char02.fbx",
+			"scale": 1.0,
+			"forward_rotation_degrees": 0.0,
+			"animations":
+			{
+				"walk":
+				{
+					"scene": "res://assets/characters/char02/Animations/Ready Idle.fbx",
+					"clip": "mixamo_com",
+				},
+				"idle":
+				{
+					"scene": "res://assets/characters/char02/Animations/Ready Idle.fbx",
+					"clip": "mixamo_com",
+				},
+				"run":
+				{
+					"scene": "res://assets/characters/char02/Animations/Ready Idle.fbx",
+					"clip": "mixamo_com",
+				},
+				"hit":
+				{
+					"scene": "res://assets/characters/char02/Animations/Uppercut Jab.fbx",
+					"clip": "mixamo_com",
+				},
+				"death":
+				{
+					"scene": "res://assets/characters/char02/Animations/Dying.fbx",
+					"clip": "mixamo_com",
+				},
+				"attack":
+				{
+					"scene": "res://assets/characters/char02/Animations/Uppercut Jab.fbx",
+					"clip": "mixamo_com",
+				},
+				"skill_1":
+				{
+					"scene": "res://assets/characters/char02/Animations/Leg Sweep.fbx",
+					"clip": "mixamo_com",
+				},
+				"skill_2":
+				{
+					"scene": "res://assets/characters/char02/Animations/Roundhouse Kick.fbx",
+					"clip": "mixamo_com",
+				},
+				"skill_3":
+				{
+					"scene": "res://assets/characters/char02/Animations/Hurricane Kick.fbx",
+					"clip": "mixamo_com",
+				},
+				"skill_4":
+				{
+					"scene": "res://assets/characters/char02/Animations/Fireball.fbx",
+					"clip": "mixamo_com",
+				},
+			},
+		},
+		"color": Color("#e89b59"),
+	},
+	{
 		"name": "숲의 궁수",
 		"title": "빠르고 정확한 사냥꾼",
 		"weapon": "참나무 활",
