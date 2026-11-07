@@ -610,7 +610,12 @@ func _build_hud() -> void:
 	bottom_panel.offset_bottom = -8
 	bottom_panel.add_theme_constant_override("separation", 8)
 	root.add_child(bottom_panel)
-	var bottom_indices := [GameData.selected_character, companion_character_index]
+	var bottom_indices := []
+	for i in range(6):
+		var ci := i % GameData.CHARACTERS.size()
+		if ci == GameData.selected_character:
+			ci = (ci + 1) % GameData.CHARACTERS.size()
+		bottom_indices.append(ci)
 	var bidx := 0
 	for c in [player] + companions:
 		var panel := VBoxContainer.new()
