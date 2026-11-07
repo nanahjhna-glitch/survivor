@@ -555,7 +555,7 @@ func _spawn_player() -> void:
 	player.health_changed.connect(_on_health_changed)
 	player.experience_changed.connect(_on_experience_changed)
 	player.level_changed.connect(_on_level_changed)
-	player.player_died.connect(_on_player_died)
+	player.player_died.connect(_on_party_member_died.bind(player))
 	add_child(player)
 	GameData.run_level = player.get("level")
 
@@ -579,6 +579,7 @@ func _spawn_player() -> void:
 		var a: float = companion_angles[i]
 		companion.position = Vector3(cos(a) * 8.0, 0.0, sin(a) * 8.0)
 		companion.auto_hunt_disabled = false
+		companion.player_died.connect(_on_party_member_died.bind(companion))
 		add_child(companion)
 		companions.append(companion)
 
@@ -1190,12 +1191,15 @@ func _show_hitbox(mesh: Mesh, at: Vector3, yaw: float, color: Color) -> void:
 func monster_defeated(at: Vector3, data: Dictionary, defeated_monster: FieldMonster) -> void:
 	total_kills += 1
 	alive_monsters.erase(defeated_monster)
-	var target := _nearest_character(at)
-	if is_instance_valid(target):
-		target.gain_experience(int(data["exp"]))
-		var idx := target.character_index
-		GameData.hero_experience[idx] = int(GameData.hero_experience.get(idx, 0)) + int(data["exp"])
-		GameData.run_experience_reward += int(data["exp"])
+	# 경험치를 파티원 전원에게 동일하게 지급 (분할 없음)
+	var exp_amount := int(data["exp"])
+	GameData.run_experience_reward += exp_amount
+	for member in [player] + companions:
+		if not is_instance_valid(member) or member.dead:
+			continue
+		member.gain_experience(exp_amount)
+		var idx := member.character_index
+		GameData.hero_experience[idx] = int(GameData.hero_experience.get(idx, 0)) + exp_amount
 		var cur_level := int(GameData.hero_levels.get(idx, 1))
 		var cur_exp := int(GameData.hero_experience.get(idx, 0))
 		var need := 100 + cur_level * 50
@@ -1359,12 +1363,28 @@ func _choose_level_up_card(card_id: String) -> void:
 		call_deferred("_show_next_level_up_cards")
 
 
-func _on_player_died() -> void:
+func _on_party_member_died(member: FieldPlayer) -> void:
+	GameAudio.play_sfx("death")
+	# 생존 파티원이 있으면 계속 진행
+	var any_alive := false
+	for m in [player] + companions:
+		if is_instance_valid(m) and not m.dead:
+			any_alive = true
+			break
+	if any_alive:
+		_show_notification("파티원이 쓰러졌습니다.", 1.5)
+		# 카메라 추적 대상이 사망했으면 생존자로 전환
+		if camera_target == member or camera_target == null:
+			for m in [player] + companions:
+				if is_instance_valid(m) and not m.dead:
+					camera_target = m
+					break
+		return
+	# 전원 사망 → 패배
 	GameData.run_won = false
 	_store_run_result()
 	GameData.save_game()
-	GameAudio.play_sfx("death")
-	_show_notification("쓰러졌습니다. 획득 골드 %d" % GameData.run_gold_reward, 4.0)
+	_show_notification("파티 전멸. 획득 골드 %d" % GameData.run_gold_reward, 4.0)
 	paused = true
 	get_tree().paused = true
 	_show_end_panel("모험 종료", "획득 골드  %d" % GameData.run_gold_reward)
