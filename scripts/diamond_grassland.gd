@@ -638,11 +638,11 @@ func _build_hud() -> void:
 	bottom_panel.add_theme_constant_override("separation", 8)
 	root.add_child(bottom_panel)
 	var bottom_indices := [GameData.selected_character, companion_character_index]
-	var idx := 0
+	var bidx := 0
 	for c in [player] + companions:
 		var panel := VBoxContainer.new()
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var name_lbl := _hud_label(str(GameData.CHARACTERS[bottom_indices[idx]]["name"]), 12)
+		var name_lbl := _hud_label(str(GameData.CHARACTERS[bottom_indices[bidx]]["name"]), 12)
 		panel.add_child(name_lbl)
 		var hp := _make_bar(Color("#db6558"))
 		hp.custom_minimum_size = Vector2(0, 12)
@@ -661,7 +661,7 @@ func _build_hud() -> void:
 			exp.max_value = required
 			exp.value = current
 		)
-		idx += 1
+		bidx += 1
 	# 4칸 채우기 (빈 패널)
 	for i in range(4 - ([player] + companions).size()):
 		var spacer := Control.new()
