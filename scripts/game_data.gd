@@ -198,10 +198,17 @@ var run_gold_reward := 0
 var run_won := true
 var run_level := 1
 var run_upgrades: Dictionary = {"power": 0, "vitality": 0, "fortune": 0}
+var hero_levels: Dictionary = {}
+var hero_experience: Dictionary = {}
 
 
 func _ready() -> void:
 	load_game()
+	for i in range(CHARACTERS.size()):
+		if not hero_levels.has(i):
+			hero_levels[i] = 1
+		if not hero_experience.has(i):
+			hero_experience[i] = 0
 
 
 func load_game() -> void:
@@ -230,6 +237,9 @@ func load_game() -> void:
 			permanent_stats[key] = maxi(int(permanent_stats[key]), int(saved_stats.get(key, 0)))
 	sound_enabled = bool(config.get_value("settings", "sound", true))
 	vibration_enabled = bool(config.get_value("settings", "vibration", true))
+	for i in range(CHARACTERS.size()):
+		hero_levels[i] = maxi(1, int(config.get_value("hero", "level_%d" % i, 1)))
+		hero_experience[i] = maxi(0, int(config.get_value("hero", "exp_%d" % i, 0)))
 
 
 func save_game() -> void:
@@ -240,6 +250,9 @@ func save_game() -> void:
 	config.set_value("profile", "character", selected_character)
 	config.set_value("profile", "stage", selected_stage)
 	config.set_value("growth", "permanent_stats", permanent_stats)
+	for i in range(CHARACTERS.size()):
+		config.set_value("hero", "level_%d" % i, int(hero_levels.get(i, 1)))
+		config.set_value("hero", "exp_%d" % i, int(hero_experience.get(i, 0)))
 	config.set_value("settings", "sound", sound_enabled)
 	config.set_value("settings", "vibration", vibration_enabled)
 	var error := config.save(SAVE_PATH)
