@@ -8,7 +8,7 @@ const MinimapScript = preload("res://scripts/diamond_grassland_minimap.gd")
 const LevelUpCardsScript = preload("res://scripts/level_up_cards.gd")
 
 const MAX_MONSTERS := 12
-const FIELD_RADIUS := 8.0
+const FIELD_RADIUS := 26.0
 const SKILL_BUTTON_SIZE := Vector2(70, 70)
 const AUTO_ATTACK_SCAN_INTERVAL := 0.1
 const AUTO_SEARCH_RADIUS := 14.0
@@ -46,7 +46,7 @@ var skill_cast_remaining := 0.0
 var elapsed_time := 0.0
 var spawn_clock := 0.0
 var auto_attack_scan_timer := 0.0
-var auto_cast_enabled := true
+var auto_cast_enabled := false
 var auto_cast_button: Button
 var auto_hunt_state := AutoHuntState.SEARCH
 var auto_hunt_target: FieldMonster
@@ -248,25 +248,24 @@ func _build_field() -> void:
 	floor_body.name = "GrasslandGround"
 	floor_body.position.y = -0.3
 	var tile_size := 1.0
-	var half := 12
+	var half := int(FIELD_RADIUS)
 	for x in range(-half, half + 1):
 		for z in range(-half, half + 1):
+			if absf(x) + absf(z) > FIELD_RADIUS:
+				continue
 			var tile := MeshInstance3D.new()
 			var box := BoxMesh.new()
 			box.size = Vector3(tile_size, 0.12, tile_size)
 			tile.mesh = box
-			tile.position = Vector3(x * tile_size + 0.5, random.randf_range(-0.08, 0.08), z * tile_size + 0.5)
+			tile.position = Vector3(x * tile_size, random.randf_range(-0.08, 0.08), z * tile_size)
 			var mat := StandardMaterial3D.new()
-			if (x + z) % 2 == 0:
-				mat.albedo_color = Color("#8fd16a")
-			else:
-				mat.albedo_color = Color("#4f9a3c")
+			mat.albedo_color = Color("#5fa84a").lerp(Color("#4a8f3a"), random.randf())
 			mat.roughness = 1.0
 			tile.material_override = mat
 			add_child(tile)
 	var floor_collider := CollisionShape3D.new()
 	var box_shape := BoxShape3D.new()
-	box_shape.size = Vector3(25.0, 0.2, 25.0)
+	box_shape.size = Vector3(FIELD_RADIUS * 2, 0.2, FIELD_RADIUS * 2)
 	floor_collider.shape = box_shape
 	floor_body.add_child(floor_collider)
 	add_child(floor_body)
@@ -300,12 +299,11 @@ func _create_diamond_ground_mesh() -> ArrayMesh:
 
 
 func _add_square_boundary() -> void:
-	var half := 12.5
 	var corners := [
-		Vector3(-half, 0, -half),
-		Vector3(half, 0, -half),
-		Vector3(half, 0, half),
-		Vector3(-half, 0, half),
+		Vector3(0, 0, -FIELD_RADIUS),
+		Vector3(FIELD_RADIUS, 0, 0),
+		Vector3(0, 0, FIELD_RADIUS),
+		Vector3(-FIELD_RADIUS, 0, 0),
 	]
 	for index in range(corners.size()):
 		_add_boundary_line(corners[index], corners[(index + 1) % corners.size()])
@@ -463,7 +461,7 @@ func _build_voxel_forest_decorations() -> void:
 	# 잔디/꽃 산포
 	for i in range(20):
 		var p := Vector3(random.randf_range(-20.0, 20.0), 0.0, random.randf_range(-20.0, 20.0))
-		if absf(p.x) >= 12.5 or absf(p.z) >= 12.5:
+		if absf(p.x) + absf(p.z) >= FIELD_RADIUS - 1.0:
 			continue
 		if Vector2(p.x, p.z).length() < 3.0:
 			continue
@@ -474,14 +472,14 @@ func _build_voxel_forest_decorations() -> void:
 	# 버섯 소수 배치
 	for i in range(3):
 		var p := Vector3(random.randf_range(-18.0, 18.0), 0.0, random.randf_range(-18.0, 18.0))
-		if absf(p.x) >= 12.5 or absf(p.z) >= 12.5:
+		if absf(p.x) + absf(p.z) >= FIELD_RADIUS - 1.0:
 			continue
 		_add_voxel_decoration(mushroom_path, p, Vector3.ONE * random.randf_range(0.9, 1.1), random.randf_range(0.0, TAU), false)
 
 	# 상자 소품
 	for i in range(2):
 		var p := Vector3(random.randf_range(-12.0, 12.0), 0.0, random.randf_range(-12.0, 12.0))
-		if absf(p.x) >= 12.5 or absf(p.z) >= 12.5:
+		if absf(p.x) + absf(p.z) >= FIELD_RADIUS - 1.0:
 			continue
 		var path: String = box_paths[random.randi_range(0, box_paths.size() - 1)]
 		_add_voxel_decoration(path, p, Vector3.ONE * 0.9, random.randf_range(0.0, TAU), true)
@@ -730,16 +728,18 @@ func _build_hud() -> void:
 		skill_buttons.append(button)
 		skill_grid.add_child(button)
 
-	auto_cast_button = _make_hud_button("자동: ON", Vector2(88, 46))
-	auto_cast_button.anchor_left = 1.0
-	auto_cast_button.anchor_right = 1.0
-	auto_cast_button.offset_left = -100
-	auto_cast_button.offset_top = 0
-	auto_cast_button.offset_right = -12
-	auto_cast_button.offset_bottom = 46
-	auto_cast_button.add_theme_font_size_override("font_size", 13)
-	auto_cast_button.pressed.connect(_toggle_auto_cast)
-	root.add_child(auto_cast_button)
+	# 자동 ON/OFF 버튼 제거
+	# 맵 전체 보기 버튼
+	var map_view_btn := _make_hud_button("맵", Vector2(58, 46))
+	map_view_btn.anchor_left = 1.0
+	map_view_btn.anchor_right = 1.0
+	map_view_btn.offset_left = -100
+	map_view_btn.offset_top = 0
+	map_view_btn.offset_right = -42
+	map_view_btn.offset_bottom = 46
+	map_view_btn.add_theme_font_size_override("font_size", 13)
+	map_view_btn.pressed.connect(_toggle_map_view)
+	root.add_child(map_view_btn)
 
 	var pause_button := _make_hud_button("Ⅱ", Vector2(58, 52))
 	pause_button.anchor_left = 1.0
@@ -824,8 +824,8 @@ func _spawn_monster() -> void:
 	var angle: float = base_angles[random.randi_range(0, 3)] + random.randf_range(-0.35, 0.35)
 	var distance := random.randf_range(8.0, 12.0)
 	enemy.position = player.position + Vector3(cos(angle) * distance, 0.0, sin(angle) * distance)
-	enemy.position.x = clampf(enemy.position.x, -12.5, 12.5)
-	enemy.position.z = clampf(enemy.position.z, -12.5, 12.5)
+	enemy.position.x = clampf(enemy.position.x, -FIELD_RADIUS, FIELD_RADIUS)
+	enemy.position.z = clampf(enemy.position.z, -FIELD_RADIUS, FIELD_RADIUS)
 	add_child(enemy)
 	alive_monsters.append(enemy)
 
@@ -893,6 +893,17 @@ func _toggle_auto_cast() -> void:
 	camera_target = null
 	if auto_cast_button != null:
 		auto_cast_button.text = "자동: %s" % ("ON" if auto_cast_enabled else "OFF")
+
+var map_view_toggled := false
+func _toggle_map_view() -> void:
+	map_view_toggled = not map_view_toggled
+	if map_view_toggled:
+		camera_target = null
+		camera_distance = 34.0
+		camera_pitch = -0.8
+		camera_yaw = 0.0
+	else:
+		camera_target = null
 
 
 func _on_skill_pressed(index: int) -> void:
@@ -1423,7 +1434,7 @@ func _build_field_decorations() -> void:
 		_add_fbx(fence_path, pos, Vector3.ONE, -angle + PI * 0.5, true)
 	for i in range(8):
 		var p := Vector3(random.randf_range(-20.0, 20.0), 0.0, random.randf_range(-20.0, 20.0))
-		if absf(p.x) >= 12.5 or absf(p.z) >= 12.5:
+		if absf(p.x) + absf(p.z) >= FIELD_RADIUS - 1.0:
 			continue
 		if Vector2(p.x, p.z).length() < 4.0:
 			continue
@@ -1431,7 +1442,7 @@ func _build_field_decorations() -> void:
 		_add_fbx(bed, p, Vector3.ONE, random.randf_range(0.0, TAU), false)
 	for i in range(6):
 		var p := Vector3(random.randf_range(-18.0, 18.0), 0.0, random.randf_range(-18.0, 18.0))
-		if absf(p.x) >= 12.5 or absf(p.z) >= 12.5:
+		if absf(p.x) + absf(p.z) >= FIELD_RADIUS - 1.0:
 			continue
 		_add_fbx(base + "misc_models/stone/bench01.fbx", p, Vector3.ONE, random.randf_range(0.0, TAU), true)
 	_add_fbx(base + "misc_models/stone/fountain01_round.fbx", Vector3(6, 0, 6), Vector3.ONE, 0.0, true)
