@@ -55,7 +55,7 @@ var auto_hunt_move_direction := Vector3.ZERO
 var running := false
 var run_button_held := false
 var paused := false
-var camera_yaw := 0.785
+var camera_yaw := 0.0
 var camera_pitch := -0.6
 var camera_distance := 12.0
 var camera_dragging := false
@@ -525,7 +525,8 @@ func _spawn_player() -> void:
 	# 기존 코드
 	# player.position = Vector3.ZERO
 	# 변경 코드 (Y축을 1.0만큼 공중으로 띄움)
-	player.position = Vector3(0.0, 0.0, 0.0)
+	var start_angles := [2.094, 4.189, -1.571, -1.047, 1.047, 1.571]
+	player.position = Vector3(cos(start_angles[2]) * 8.0, 0.0, sin(start_angles[2]) * 8.0)
 	player.health_changed.connect(_on_health_changed)
 	player.experience_changed.connect(_on_experience_changed)
 	player.level_changed.connect(_on_level_changed)
@@ -549,7 +550,9 @@ func _spawn_player() -> void:
 		var companion: FieldPlayer = PlayerScript.new()
 		companion.name = "Companion%d" % i
 		companion.setup(self, GameData.CHARACTERS[companion_index])
-		companion.position = Vector3(2.0 + float(i) * 1.5, 0.0, 0.0)
+		var angles: Array[float] = [2.094, 4.189, -1.047, 1.047, 1.571, -1.571]
+		var a: float = angles[i]
+		companion.position = Vector3(cos(a) * 8.0, 0.0, sin(a) * 8.0)
 		companion.auto_hunt_disabled = false
 		add_child(companion)
 		companions.append(companion)
