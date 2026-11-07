@@ -1048,13 +1048,11 @@ func monster_defeated(at: Vector3, data: Dictionary) -> void:
 			living_monsters.append(enemy)
 	alive_monsters = living_monsters
 	var target := _nearest_character(at)
-	_spawn_drop(at, "experience", int(data["exp"]), target)
+	if is_instance_valid(target):
+		target.gain_experience(int(data["exp"]))
 	if random.randf() < float(CombatData.DROP_RULES["gold_chance"]):
-		_spawn_drop(at + Vector3(0.35, 0.0, 0.0), "gold", int(data["gold"]), target)
-	if random.randf() < float(CombatData.DROP_RULES["potion_chance"]):
-		_spawn_drop(
-			at + Vector3(-0.35, 0.0, 0.0), "potion", int(CombatData.DROP_RULES["potion_heal"]), target
-		)
+		GameData.add_gold(int(data["gold"]))
+		gold_label.text = "골드 %d" % GameData.gold
 
 
 func _spawn_drop(at: Vector3, kind: String, amount: int, target: FieldPlayer = null) -> void:
