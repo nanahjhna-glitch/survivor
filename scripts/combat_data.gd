@@ -48,6 +48,13 @@ const SKILLS := [
 	},
 ]
 
+const CHARACTER_SKILL_SETS := {
+	0: [0, 2],
+	1: [0, 1, 2],
+	2: [0, 1, 3],
+	3: [1, 2, 3],
+}
+
 const AUTO_SKILL_RULES := {
 	1: {"minimum_targets": 2, "use_on_strong_target": true},
 	2: {"minimum_targets": 2, "use_on_strong_target": true},
