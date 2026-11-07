@@ -7,7 +7,7 @@ const JoystickScript = preload("res://scripts/virtual_joystick.gd")
 const MinimapScript = preload("res://scripts/diamond_grassland_minimap.gd")
 const LevelUpCardsScript = preload("res://scripts/level_up_cards.gd")
 
-const MAX_MONSTERS := 12
+const MAX_MONSTERS := 120
 const FIELD_RADIUS := 26.0
 const SKILL_BUTTON_SIZE := Vector2(70, 70)
 const AUTO_ATTACK_SCAN_INTERVAL := 0.1
@@ -109,9 +109,11 @@ func _process(delta: float) -> void:
 	for companion in companions:
 		if is_instance_valid(companion) and not companion.dead and companion.auto_hunt_controller != null:
 			companion.auto_hunt_controller.update(delta)
-	if spawn_clock >= 2.8 and alive_monsters.size() < MAX_MONSTERS:
+	if spawn_clock >= 0.28 and alive_monsters.size() < MAX_MONSTERS:
 		spawn_clock = 0.0
-		_spawn_monster()
+		for i in range(3):
+			if alive_monsters.size() < MAX_MONSTERS:
+				_spawn_monster()
 	_update_hud()
 	_update_camera(delta)
 
