@@ -637,12 +637,12 @@ func _build_hud() -> void:
 	bottom_panel.offset_bottom = -10
 	bottom_panel.add_theme_constant_override("separation", 8)
 	root.add_child(bottom_panel)
-	var char_indices := [GameData.selected_character, companion_character_index]
+	var bottom_indices := [GameData.selected_character, companion_character_index]
 	var idx := 0
 	for c in [player] + companions:
 		var panel := VBoxContainer.new()
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var name_lbl := _hud_label(str(GameData.CHARACTERS[char_indices[idx]]["name"]), 12)
+		var name_lbl := _hud_label(str(GameData.CHARACTERS[bottom_indices[idx]]["name"]), 12)
 		panel.add_child(name_lbl)
 		var hp := _make_bar(Color("#db6558"))
 		hp.custom_minimum_size = Vector2(0, 12)
