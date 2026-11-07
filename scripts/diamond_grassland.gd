@@ -25,6 +25,7 @@ var companion_character_index := 0
 var top_time_label: Label
 var top_kills_label: Label
 var total_kills := 0
+var focused_character: FieldPlayer = null
 var camera: Camera3D
 var joystick: GrasslandJoystick
 var hud_layer: CanvasLayer
@@ -623,6 +624,11 @@ func _build_hud() -> void:
 	for c in [player] + companions:
 		var panel := VBoxContainer.new()
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		panel.mouse_filter = Control.MOUSE_FILTER_STOP
+		panel.gui_input.connect(func(event: InputEvent) -> void:
+			if event is InputEventMouseButton and event.pressed:
+				focused_character = c
+		)
 		var name_row := HBoxContainer.new()
 		var name_lbl := _hud_label(str(GameData.CHARACTERS[bottom_indices[bidx]]["name"]), 12)
 		var level_lbl := _hud_label("Lv.1", 11)
@@ -1291,17 +1297,27 @@ func _update_skill_button(index: int) -> void:
 func _update_camera(delta: float = 1.0 / 60.0) -> void:
 	if player == null or camera == null:
 		return
-	var interpolated_player_position := player.get_global_transform_interpolated().origin
+	var target_origin: Vector3
+	if focused_character != null and is_instance_valid(focused_character) and not focused_character.dead:
+		target_origin = focused_character.get_global_transform_interpolated().origin
+		camera_distance = 6.0
+		camera_pitch = -0.35
+	elif auto_cast_enabled:
+		target_origin = Vector3.ZERO
+		camera_distance = 18.0
+		camera_pitch = -0.7
+	else:
+		target_origin = player.get_global_transform_interpolated().origin
 	var cos_pitch := cos(camera_pitch)
 	var offset := Vector3(
 		sin(camera_yaw) * cos_pitch * camera_distance,
 		sin(-camera_pitch) * camera_distance,
 		cos(camera_yaw) * cos_pitch * camera_distance
 	)
-	var target := interpolated_player_position + offset
+	var target := target_origin + offset
 	var follow_weight := 1.0 - exp(-14.0 * delta)
 	camera.global_position = camera.global_position.lerp(target, follow_weight)
-	camera.look_at(interpolated_player_position + Vector3.UP * CAMERA_LOOK_HEIGHT, Vector3.UP)
+	camera.look_at(target_origin + Vector3.UP * CAMERA_LOOK_HEIGHT, Vector3.UP)
 
 
 func _toggle_pause() -> void:
