@@ -21,6 +21,7 @@ const RUN_ANIMATION_EXIT_SPEED := WALK_SPEED * 1.08
 const ANIMATION_SPEED_SMOOTHING := 12.0
 
 var arena: Node3D
+var character_index := 0
 var level := 1
 var experience := 0
 var next_level_experience := CombatData.XP_PER_LEVEL

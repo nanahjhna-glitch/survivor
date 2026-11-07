@@ -532,6 +532,7 @@ func _spawn_player() -> void:
 	# 변경 코드 (Y축을 1.0만큼 공중으로 띄움)
 	var start_angles := [2.094, 4.189, -1.571, -1.047, 1.047, 1.571]
 	player.position = Vector3(cos(start_angles[2]) * 8.0, 0.0, sin(start_angles[2]) * 8.0)
+	player.character_index = GameData.selected_character
 	player.health_changed.connect(_on_health_changed)
 	player.experience_changed.connect(_on_experience_changed)
 	player.level_changed.connect(_on_level_changed)
@@ -555,6 +556,7 @@ func _spawn_player() -> void:
 		var companion: FieldPlayer = PlayerScript.new()
 		companion.name = "Companion%d" % i
 		companion.setup(self, GameData.CHARACTERS[companion_index])
+		companion.character_index = companion_index
 		var angles: Array[float] = [2.094, 4.189, -1.047, 1.047, 1.571, -1.571]
 		var a: float = angles[i]
 		companion.position = Vector3(cos(a) * 8.0, 0.0, sin(a) * 8.0)
@@ -1113,6 +1115,8 @@ func monster_defeated(at: Vector3, data: Dictionary) -> void:
 	var target := _nearest_character(at)
 	if is_instance_valid(target):
 		target.gain_experience(int(data["exp"]))
+		var idx := target.character_index
+		GameData.hero_experience[idx] = int(GameData.hero_experience.get(idx, 0)) + int(data["exp"])
 	if random.randf() < float(CombatData.DROP_RULES["gold_chance"]):
 		GameData.add_gold(int(data["gold"]))
 		gold_label.text = "골드 %d" % GameData.gold
