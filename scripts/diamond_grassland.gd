@@ -5,8 +5,6 @@ const MonsterScript = preload("res://scripts/field_monster.gd")
 const DropScript = preload("res://scripts/field_drop.gd")
 const JoystickScript = preload("res://scripts/virtual_joystick.gd")
 const MinimapScript = preload("res://scripts/diamond_grassland_minimap.gd")
-const LevelUpCardsScript = preload("res://scripts/level_up_cards.gd")
-
 const MAX_MONSTERS := 120
 const FIELD_RADIUS := 26.0
 const SKILL_BUTTON_SIZE := Vector2(70, 70)
@@ -73,9 +71,6 @@ var progress_save_pending := false
 var pause_panel: PanelContainer
 var pause_root: Control
 var pause_detail_label: Label
-var level_up_overlay: LevelUpCardOverlay
-var pending_level_ups: Array[Dictionary] = []
-var leveling_member: FieldPlayer = null
 
 
 func _ready() -> void:
@@ -1392,57 +1387,16 @@ func _on_experience_changed(current: int, required: int) -> void:
 		exp_label.text = "EXP %d / %d" % [current, required]
 
 
-func _on_level_changed(new_level: int, unlocked_skill: int, member: FieldPlayer = null) -> void:
-	if member == null:
-		member = player
+func _on_level_changed(
+	new_level: int, unlocked_skill: int, _member: FieldPlayer = null
+) -> void:
 	GameData.run_level = new_level
-	GameData.save_game()
 	GameAudio.play_sfx("level_up")
-	pending_level_ups.append({"level": new_level, "unlocked_skill": unlocked_skill, "member": member})
-	paused = true
-	get_tree().paused = true
-	if pending_level_ups.size() == 1:
-		call_deferred("_show_next_level_up_cards")
-	_update_hud()
-
-
-func _show_next_level_up_cards() -> void:
-	if pending_level_ups.is_empty() or not is_instance_valid(hud_layer):
-		return
-	if level_up_overlay != null:
-		level_up_overlay.queue_free()
-	var level_info: Dictionary = pending_level_ups.front()
-	leveling_member = level_info.get("member", player)
-	var cards := CombatData.LEVEL_UP_CARDS.duplicate()
-	cards.shuffle()
-	cards = cards.slice(0, 3)
-	level_up_overlay = LevelUpCardsScript.new()
-	level_up_overlay.card_selected.connect(_choose_level_up_card)
-	level_up_overlay.setup(int(level_info["level"]), cards)
-	hud_layer.add_child(level_up_overlay)
-
-
-func _choose_level_up_card(card_id: String) -> void:
-	if pending_level_ups.is_empty():
-		return
-	GameAudio.play_sfx("card_pick")
-	if leveling_member != null and is_instance_valid(leveling_member):
-		leveling_member.apply_level_up_card(card_id)
-	_update_hud()
-	var level_info: Dictionary = pending_level_ups.pop_front()
-	var unlocked_skill := int(level_info["unlocked_skill"])
 	if unlocked_skill > 0:
-		_show_notification("강화 완료! 스킬 %d 해금" % unlocked_skill, 2.5)
+		_show_notification("레벨 업! Lv.%d · 스킬 %d 해금" % [new_level, unlocked_skill], 2.5)
 	else:
-		_show_notification("강화 카드 적용 완료", 1.8)
-	if pending_level_ups.is_empty():
-		level_up_overlay.queue_free()
-		level_up_overlay = null
-		paused = false
-		get_tree().paused = false
-		_update_skill_button_states()
-	else:
-		call_deferred("_show_next_level_up_cards")
+		_show_notification("레벨 업! Lv.%d" % new_level, 1.8)
+	_update_hud()
 
 
 func _on_party_member_died(member: FieldPlayer) -> void:
