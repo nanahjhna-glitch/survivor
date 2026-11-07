@@ -1,199 +1,245 @@
 class_name AutoHuntController
 extends Node
 
-enum State { IDLE, SEARCH, MOVE_TO_TARGET, CASTING, GCD, STUNNED }
-enum TargetingMode { CURRENT, NEAREST, LOWEST_HP }
+enum State { IDLE, SEARCH, APPROACH, POSITION, ATTACK, STUNNED }
 
-@export var search_radius: float = 12.0
-@export var targeting_mode: TargetingMode = TargetingMode.CURRENT
+@export var search_radius: float = 14.0
+@export var decision_interval: float = 0.18
+@export var target_lock_duration: float = 0.75
+@export var target_switch_margin: float = 2.0
+@export var preferred_ranged_ratio: float = 0.78
 
 var player: FieldPlayer
 var arena: Node3D
 var state: State = State.IDLE
-var current_target: Node3D = null
-var skill_list: Array[SkillData] = []
-var gcd_remaining: float = 0.0
-var cast_remaining: float = 0.0
-var pending_skill: SkillData = null
-var stunned: bool = false
+var current_target: FieldMonster
+var desired_move_direction := Vector3.ZERO
+var _decision_timer := 0.0
+var _target_lock_remaining := 0.0
+var _stuck_time := 0.0
+var _slot_offset := 0
+var _last_position := Vector3.ZERO
 
-func setup(p: FieldPlayer, a: Node3D) -> void:
-	player = p
-	arena = a
 
-func register_skill(skill: SkillData) -> void:
-	skill_list.append(skill)
+func setup(actor: FieldPlayer, field: Node3D) -> void:
+	player = actor
+	arena = field
+	_last_position = actor.global_position
+
 
 func update(delta: float) -> void:
 	if player == null or player.dead or player.auto_hunt_disabled:
+		desired_move_direction = Vector3.ZERO
+		state = State.IDLE
 		return
-	# CC 상태 체크
-	if _is_cc():
-		if state != State.STUNNED:
-			state = State.STUNNED
-		_tick_cooldowns(delta)
-		_tick_gcd(delta)
+
+	_target_lock_remaining = maxf(0.0, _target_lock_remaining - delta)
+	if _is_crowd_controlled():
+		desired_move_direction = Vector3.ZERO
+		state = State.STUNNED
+		_last_position = player.global_position
 		return
 	if state == State.STUNNED:
+		state = State.SEARCH
+
+	_decision_timer -= delta
+	if (
+		_decision_timer <= 0.0
+		or not is_instance_valid(current_target)
+		or current_target.dead
+		or not _in_search_radius(current_target)
+	):
+		_select_target()
+		_decision_timer = decision_interval
+
+	if not is_instance_valid(current_target):
+		desired_move_direction = Vector3.ZERO
 		state = State.IDLE
-	_tick_cooldowns(delta)
-	_tick_gcd(delta)
-	match state:
-		State.IDLE, State.SEARCH:
-			_search_target()
-		State.MOVE_TO_TARGET:
-			_move_to_target(delta)
-		State.CASTING:
-			_update_cast(delta)
-		State.GCD:
-			if gcd_remaining <= 0.0:
-				state = State.SEARCH
+		_last_position = player.global_position
+		return
 
-func _is_cc() -> bool:
-	return bool(player.get("stunned")) or bool(player.get("frozen")) or bool(player.get("silenced"))
+	_update_movement_intent(delta)
+	_try_basic_attack()
 
-func _tick_cooldowns(delta: float) -> void:
-	for s in skill_list:
-		s.tick(delta)
 
-func _tick_gcd(delta: float) -> void:
-	gcd_remaining = maxf(0.0, gcd_remaining - delta)
+func _is_crowd_controlled() -> bool:
+	return player.stunned or player.frozen
 
-func _search_target() -> void:
+
+func _select_target() -> void:
 	var candidates := _collect_enemies_in_radius(search_radius)
 	if candidates.is_empty():
-		state = State.IDLE
 		current_target = null
+		state = State.IDLE
 		return
-	if not is_instance_valid(current_target) or current_target.dead:
-		current_target = _pick_default(candidates)
+
+	if (
+		is_instance_valid(current_target)
+		and not current_target.dead
+		and _in_search_radius(current_target)
+		and _target_lock_remaining > 0.0
+	):
+		return
+
+	var best_target: FieldMonster
+	var best_score := -INF
+	for candidate in candidates:
+		if not is_instance_valid(candidate):
+			continue
+		var monster := candidate as FieldMonster
+		if monster == null or monster.dead:
+			continue
+		var score := _target_score(monster)
+		if score > best_score:
+			best_score = score
+			best_target = monster
+
+	if (
+		is_instance_valid(current_target)
+		and not current_target.dead
+		and _in_search_radius(current_target)
+		and best_target != current_target
+		and best_score < _target_score(current_target) + target_switch_margin
+	):
+		return
+
+	if best_target != current_target:
+		current_target = best_target
+		_target_lock_remaining = target_lock_duration
+		_slot_offset = 0
+	state = State.APPROACH if is_instance_valid(current_target) else State.IDLE
+
+
+func _target_score(target: FieldMonster) -> float:
+	var distance := _horizontal_distance(player.global_position, target.global_position)
+	var maximum_health := maxf(1.0, float(target.monster_data.get("hp", 1.0)))
+	var health_ratio := clampf(target.health / maximum_health, 0.0, 1.0)
+	var score := search_radius - distance
+	score += (1.0 - health_ratio) * 2.0
+	score += float(target.monster_data.get("attack", 0.0)) * 0.04
+	score += float(target.monster_data.get("speed", 0.0)) * 0.15
+	if target.player == player:
+		score += 3.0
+	if target == current_target:
+		score += 1.0
+	return score
+
+
+func _update_movement_intent(delta: float) -> void:
+	if player.input_direction.length_squared() > 0.01:
+		desired_move_direction = Vector3.ZERO
+		state = State.ATTACK if _target_in_attack_range() else State.POSITION
+		_last_position = player.global_position
+		return
+
+	var attack_range := player.attack_range * player.hitbox_size_multiplier
+	var ranged := player.attack_style != "melee"
+	var preferred_distance := (
+		clampf(attack_range * preferred_ranged_ratio, 3.5, attack_range - 0.5)
+		if ranged
+		else minf(1.15, attack_range * 0.78)
+	)
+	var angle := (
+		TAU * float(player.formation_slot) / float(GameData.PARTY_SIZE)
+		+ float(_slot_offset) * PI / 4.0
+	)
+	var radial := Vector3(cos(angle), 0.0, sin(angle))
+	var goal := current_target.global_position + radial * preferred_distance
+	var to_goal := goal - player.global_position
+	to_goal.y = 0.0
+	var separation := _ally_separation()
+	var combined := to_goal + separation * 0.9
+	var distance := _horizontal_distance(player.global_position, current_target.global_position)
+	var comfortable := absf(distance - preferred_distance) <= 0.35
+
+	if comfortable and separation.length_squared() < 0.01:
+		desired_move_direction = Vector3.ZERO
+		state = State.ATTACK if distance <= attack_range else State.POSITION
 	else:
-		match targeting_mode:
-			TargetingMode.NEAREST:
-				current_target = _nearest(candidates)
-			TargetingMode.LOWEST_HP:
-				current_target = _lowest_hp(candidates)
-			_:
-				if not candidates.has(current_target):
-					current_target = _nearest(candidates)
-	if not is_instance_valid(current_target):
-		state = State.IDLE
-		return
-	_try_cast_or_move()
+		desired_move_direction = (
+			combined.normalized() if combined.length_squared() > 0.01 else Vector3.ZERO
+		)
+		state = State.POSITION if distance <= attack_range else State.APPROACH
 
-func _try_cast_or_move() -> void:
-	var ready := _ready_skills_sorted()
-	for skill in ready:
-		if _in_range(current_target, skill.range):
-			_start_cast(skill)
-			return
-	# 기본 공격 사거리
-	if _in_range(current_target, player.attack_range):
-		player.try_basic_attack()
-		state = State.GCD
-		gcd_remaining = player.attack_cooldown_duration
-		return
-	state = State.MOVE_TO_TARGET
+	_update_stuck_recovery(delta)
 
-func _start_cast(skill: SkillData) -> void:
-	pending_skill = skill
-	cast_remaining = skill.cast_time * player.casting_time_multiplier
-	state = State.CASTING
-	player.play_skill_animation(skill.animation_id, skill.cast_time)
-	player.skill_movement_locked = true
 
-func _update_cast(delta: float) -> void:
-	cast_remaining -= delta
-	if cast_remaining > 0.0:
-		return
-	# 시전 완료 → 효과 적용
-	if is_instance_valid(current_target) and not current_target.dead:
-		if arena != null and arena.has_method("apply_skill"):
-			arena.call("apply_skill", player, pending_skill, current_target)
-	pending_skill.reset_cooldown()
-	state = State.GCD
-	gcd_remaining = pending_skill.gcd
-	pending_skill = null
-	player._release_skill_movement()
+func _update_stuck_recovery(delta: float) -> void:
+	var moved := player.global_position.distance_to(_last_position)
+	if desired_move_direction.length_squared() > 0.01 and moved < 0.015:
+		_stuck_time += delta
+	else:
+		_stuck_time = 0.0
+	_last_position = player.global_position
+	if _stuck_time >= 0.7:
+		_slot_offset = (_slot_offset + 1) % 8
+		_stuck_time = 0.0
+		_target_lock_remaining = minf(_target_lock_remaining, 0.2)
+		state = State.POSITION
 
-func _move_to_target(delta: float) -> void:
-	if not is_instance_valid(current_target) or current_target.dead:
-		current_target = null
-		state = State.SEARCH
-		return
-	var dir := current_target.global_position - player.global_position
-	dir.y = 0.0
-	if dir.length() <= 0.1:
-		state = State.SEARCH
-		return
-	var nav_agent := player.get_node_or_null("NavigationAgent3D") as NavigationAgent3D
-	var move_dir := dir
-	if nav_agent != null:
-		nav_agent.target_position = current_target.global_position
-		var next_pos := nav_agent.get_next_path_position()
-		move_dir = next_pos - player.global_position
-		move_dir.y = 0.0
-	if move_dir.length_squared() <= 0.001:
-		move_dir = dir
-	move_dir = move_dir.normalized()
-	var speed := player.move_speed * (1.65 if player.running else 1.0)
-	player.velocity.x = move_dir.x * speed
-	player.velocity.z = move_dir.z * speed
-	player.move_and_slide()
-	if _in_range(current_target, _min_skill_range()):
-		state = State.SEARCH
 
-func _collect_enemies_in_radius(r: float) -> Array:
-	var result: Array = []
+func _ally_separation() -> Vector3:
+	var separation := Vector3.ZERO
 	if arena == null:
-		return result
-	var enemies: Array = []
+		return separation
+	var allies: Array = [arena.get("player")]
+	allies.append_array(arena.get("companions"))
+	for candidate in allies:
+		if not is_instance_valid(candidate):
+			continue
+		var ally := candidate as FieldPlayer
+		if ally == null or ally == player or ally.dead:
+			continue
+		var away := player.global_position - ally.global_position
+		away.y = 0.0
+		var distance := away.length()
+		if distance > 0.01 and distance < 1.5:
+			separation += away.normalized() * (1.5 - distance)
+	return separation
+
+
+func _try_basic_attack() -> void:
+	if not _target_in_attack_range():
+		return
+	state = State.ATTACK
+	player.try_basic_attack(current_target)
+
+
+func _target_in_attack_range() -> bool:
+	return (
+		is_instance_valid(current_target)
+		and not current_target.dead
+		and _horizontal_distance(player.global_position, current_target.global_position)
+		<= player.attack_range * player.hitbox_size_multiplier
+	)
+
+
+func _in_search_radius(target: FieldMonster) -> bool:
+	return (
+		is_instance_valid(target)
+		and _horizontal_distance(player.global_position, target.global_position) <= search_radius
+	)
+
+
+func _collect_enemies_in_radius(radius: float) -> Array:
+	if arena == null:
+		return []
+	if arena.has_method("get_enemies_near"):
+		return arena.call("get_enemies_near", player.global_position, radius)
 	if arena.has_method("get_enemies"):
-		enemies = arena.call("get_enemies")
-	for enemy in enemies:
-		var node := enemy as Node3D
-		if is_instance_valid(node) and not (node.get("dead") == true) \
-		   and node.global_position.distance_to(player.global_position) <= r:
-			result.append(node)
-	return result
+		var nearby: Array = []
+		for enemy in arena.call("get_enemies"):
+			if not is_instance_valid(enemy):
+				continue
+			var monster := enemy as FieldMonster
+			if monster != null and not monster.dead:
+				if _horizontal_distance(player.global_position, monster.global_position) <= radius:
+					nearby.append(monster)
+		return nearby
+	return []
 
-func _ready_skills_sorted() -> Array:
-	var ready := skill_list.filter(func(s): return s.is_ready())
-	ready.sort_custom(func(a, b): return int(a.skill_type) < int(b.skill_type))
-	return ready
 
-func _in_range(target: Node3D, r: float) -> bool:
-	return is_instance_valid(target) and target.global_position.distance_to(player.global_position) <= r
-
-func _nearest(arr: Array) -> Node3D:
-	var best: Node3D = null
-	var best_d := INF
-	for e in arr:
-		var enemy := e as Node3D
-		var d := enemy.global_position.distance_to(player.global_position)
-		if d < best_d:
-			best_d = d
-			best = e
-	return best
-
-func _lowest_hp(arr: Array) -> Node3D:
-	var best: Node3D = null
-	var best_hp := INF
-	for e in arr:
-		var enemy := e as Node3D
-		var hp := float(enemy.get("health"))
-		if hp < best_hp:
-			best_hp = hp
-			best = e
-	return best
-
-func _pick_default(arr: Array) -> Node3D:
-	if is_instance_valid(current_target) and not current_target.dead and arr.has(current_target):
-		return current_target
-	return _nearest(arr)
-
-func _min_skill_range() -> float:
-	var r := player.attack_range
-	for s in skill_list:
-		r = minf(r, s.range)
-	return r
+func _horizontal_distance(a: Vector3, b: Vector3) -> float:
+	a.y = 0.0
+	b.y = 0.0
+	return a.distance_to(b)

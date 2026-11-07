@@ -11,6 +11,7 @@ const SCENES := {
 	"result": "res://scenes/result.tscn",
 	"permanent_growth": "res://scenes/permanent_growth.tscn",
 	"collection": "res://scenes/collection.tscn",
+	"hero_detail": "res://scenes/hero_detail.tscn",
 	"settings": "res://scenes/settings.tscn",
 }
 

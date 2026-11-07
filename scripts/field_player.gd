@@ -22,6 +22,7 @@ const ANIMATION_SPEED_SMOOTHING := 12.0
 
 var arena: Node3D
 var character_index := 0
+var formation_slot := 0
 var level := 1
 var experience := 0
 var next_level_experience := CombatData.XP_PER_LEVEL
@@ -112,6 +113,8 @@ func setup(game: Node3D, character: Dictionary) -> void:
 
 
 func _ready() -> void:
+	collision_layer = 1
+	collision_mask = 3
 	var collider := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
 	shape.radius = 0.38
@@ -389,8 +392,8 @@ func _turn_toward(direction: Vector3, delta: float) -> void:
 	direction.y = 0.0
 	if direction.length_squared() <= 0.001:
 		return
-	var target_yaw := atan2(direction.x, direction.z)
-	rotation.y = target_yaw
+	var target_yaw := atan2(-direction.x, -direction.z)
+	rotation.y = lerp_angle(rotation.y, target_yaw, 1.0 - exp(-TURN_SPEED * delta))
 
 
 func _on_character_animation_finished(animation_name: StringName) -> void:
@@ -485,9 +488,15 @@ func set_auto_hunt_disabled(disabled: bool) -> void:
 	auto_hunt_disabled = disabled
 
 
-func try_basic_attack() -> void:
+func try_basic_attack(target: Node3D = null) -> void:
 	if dead or attack_cooldown > 0.0 or action_animation_remaining > 0.0:
 		return
+	if is_instance_valid(target):
+		var to_target := target.global_position - global_position
+		to_target.y = 0.0
+		if to_target.length_squared() > 0.001:
+			rotation.y = atan2(-to_target.x, -to_target.z)
+			facing_target = target
 	attack_cooldown = attack_cooldown_duration
 	attack_animation_time = 0.28
 	action_animation_remaining = maxf(play_character_animation("attack", 1.0, 0.0), 0.55)
@@ -593,11 +602,6 @@ func _physics_process(delta: float) -> void:
 	elif action_animation_remaining <= 0.0:
 		facing_target = null
 	invulnerability_time = maxf(0.0, invulnerability_time - delta)
-	var arena_auto_cast := true
-	if arena != null and arena.has_method("get"):
-		arena_auto_cast = bool(arena.get("auto_cast_enabled"))
-	if auto_hunt_controller != null and input_direction == Vector2.ZERO and not auto_hunt_disabled and not arena_auto_cast:
-		auto_hunt_controller.update(delta)
 	regen_timer += delta
 	if regen_timer >= 1.0:
 		regen_timer -= 1.0
@@ -605,6 +609,12 @@ func _physics_process(delta: float) -> void:
 			health = minf(max_health, health + hp_regen_per_second)
 			health_changed.emit(health, max_health)
 	var direction := Vector3(input_direction.x, 0.0, input_direction.y)
+	if (
+		direction.length_squared() <= 0.01
+		and auto_hunt_controller != null
+		and not auto_hunt_disabled
+	):
+		direction = auto_hunt_controller.desired_move_direction
 	var target_velocity := Vector3.ZERO
 	if not skill_movement_locked and direction.length_squared() > 0.01:
 		direction = direction.normalized()
@@ -669,7 +679,7 @@ func _update_movement_animation(delta: float) -> void:
 
 	if action_animation_remaining > 0.0:
 		# 공격/스킬 중에도 입력이 있으면 하체(legs) 걷기 모션을 적용한다.
-		var is_moving_now := input_direction.length_squared() > 0.01
+		var is_moving_now := actual_speed > IDLE_SPEED_THRESHOLD
 		if is_moving_now and legs.size() >= 2:
 			animation_clock += delta * 7.0 * animation_playback_speed
 			legs[0].rotation.x = sin(animation_clock) * 0.42

@@ -10,6 +10,7 @@ const CRYSTAL_COLOR := Color("#6ee4ed")
 var field: Node3D
 var player: FieldPlayer
 var field_radius := 26.0
+var redraw_timer := 0.0
 
 
 func setup(game: Node3D, target: FieldPlayer, radius: float) -> void:
@@ -18,8 +19,11 @@ func setup(game: Node3D, target: FieldPlayer, radius: float) -> void:
 	field_radius = radius
 
 
-func _process(_delta: float) -> void:
-	queue_redraw()
+func _process(delta: float) -> void:
+	redraw_timer -= delta
+	if redraw_timer <= 0.0:
+		redraw_timer = 0.12
+		queue_redraw()
 
 
 func _draw() -> void:

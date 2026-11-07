@@ -11,9 +11,11 @@ const MAX_MONSTERS := 120
 const FIELD_RADIUS := 26.0
 const SKILL_BUTTON_SIZE := Vector2(70, 70)
 const AUTO_ATTACK_SCAN_INTERVAL := 0.1
-const AUTO_SEARCH_RADIUS := 14.0
-const AUTO_GLOBAL_COOLDOWN := 0.25
+const MONSTER_SPAWN_INTERVAL := 0.0933333
+const PROGRESS_SAVE_INTERVAL := 5.0
 const AUTO_SKILL_PRIORITY: Array[int] = [3, 1, 2, 0]
+const SPATIAL_CELL_SIZE := 4.0
+const SPATIAL_REBUILD_INTERVAL := 0.2
 const CAMERA_OFFSET := Vector3(0.0, 16.0, 12.0)
 const CAMERA_LOOK_HEIGHT := 0.5
 
@@ -62,9 +64,14 @@ var camera_distance := 40.0
 var camera_dragging := false
 var random := RandomNumberGenerator.new()
 var alive_monsters: Array[FieldMonster] = []
+var monster_spatial_cells: Dictionary = {}
+var spatial_rebuild_timer := 0.0
 var notification_timer := 0.0
+var progress_save_timer := 0.0
+var progress_save_pending := false
 var pause_panel: PanelContainer
 var pause_root: Control
+var pause_detail_label: Label
 var level_up_overlay: LevelUpCardOverlay
 var pending_level_ups: Array[Dictionary] = []
 
@@ -86,6 +93,12 @@ func _process(delta: float) -> void:
 	spawn_clock += delta
 	notification_timer = maxf(0.0, notification_timer - delta)
 	notification_label.visible = notification_timer > 0.0
+	if progress_save_pending:
+		progress_save_timer += delta
+		if progress_save_timer >= PROGRESS_SAVE_INTERVAL:
+			GameData.save_game()
+			progress_save_pending = false
+			progress_save_timer = 0.0
 	for index in range(player.skill_cooldowns.size()):
 		player.skill_cooldowns[index] = maxf(0.0, player.skill_cooldowns[index] - delta)
 		_update_skill_button(index)
@@ -95,30 +108,35 @@ func _process(delta: float) -> void:
 			_execute_skill(player.casting_skill_index)
 			player.casting_skill_index = -1
 	if auto_cast_enabled:
-		_auto_cast_combat(delta)
+		auto_attack_scan_timer -= delta
+		if auto_attack_scan_timer <= 0.0:
+			auto_attack_scan_timer = AUTO_ATTACK_SCAN_INTERVAL
+			_auto_cast_combat()
 	else:
-		auto_hunt_state = AutoHuntState.SEARCH
-		auto_hunt_target = null
-		auto_hunt_move_direction = Vector3.ZERO
-	if player.auto_hunt_controller != null and not player.dead:
-		player.auto_hunt_disabled = false
-		player.auto_hunt_controller.update(delta)
-	for companion in companions:
-		if is_instance_valid(companion) and not companion.dead:
-			_companion_auto_attack(companion)
-	for companion in companions:
-		if is_instance_valid(companion) and not companion.dead and companion.auto_hunt_controller != null:
-			companion.auto_hunt_controller.update(delta)
-	if spawn_clock >= 0.28 and alive_monsters.size() < MAX_MONSTERS:
+		auto_attack_scan_timer = 0.0
+	if alive_monsters.size() >= MAX_MONSTERS:
 		spawn_clock = 0.0
-		for i in range(3):
-			if alive_monsters.size() < MAX_MONSTERS:
-				_spawn_monster()
+	elif spawn_clock >= MONSTER_SPAWN_INTERVAL:
+		spawn_clock -= MONSTER_SPAWN_INTERVAL
+		_spawn_monster()
 	_update_hud()
 	_update_camera(delta)
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
+	if player == null or player.dead:
+		return
+	spatial_rebuild_timer -= delta
+	if spatial_rebuild_timer <= 0.0:
+		_rebuild_monster_spatial_index()
+		spatial_rebuild_timer = SPATIAL_REBUILD_INTERVAL
+	for actor in [player] + companions:
+		if (
+			is_instance_valid(actor)
+			and not actor.dead
+			and actor.auto_hunt_controller != null
+		):
+			actor.auto_hunt_controller.update(delta)
 	_update_keyboard_movement()
 
 
@@ -527,6 +545,7 @@ func _spawn_player() -> void:
 	player = PlayerScript.new()
 	player.name = "Player"
 	player.setup(self, GameData.CHARACTERS[GameData.selected_character])
+	player.formation_slot = 0
 	# 기존 코드
 	# player.position = Vector3.ZERO
 	# 변경 코드 (Y축을 1.0만큼 공중으로 띄움)
@@ -546,19 +565,18 @@ func _spawn_player() -> void:
 	camera.fov = 60.0
 	add_child(camera)
 
-	# AI 동료 캐릭터 출전 (총 6명 파티)
-	for i in range(5):
-		var companion_index := i % GameData.CHARACTERS.size()
-		if companion_index == GameData.selected_character:
-			companion_index = (companion_index + 1) % GameData.CHARACTERS.size()
+	# AI 동료 캐릭터 출전 (주인공 포함 6명 파티)
+	var companion_angles: Array[float] = [2.094, 4.189, -1.047, 1.047, 1.571, -1.571]
+	for i in range(GameData.PARTY_SIZE - 1):
+		var companion_index := GameData.party_characters[i + 1]
 		if i == 0:
 			companion_character_index = companion_index
 		var companion: FieldPlayer = PlayerScript.new()
 		companion.name = "Companion%d" % i
 		companion.setup(self, GameData.CHARACTERS[companion_index])
 		companion.character_index = companion_index
-		var angles: Array[float] = [2.094, 4.189, -1.047, 1.047, 1.571, -1.571]
-		var a: float = angles[i]
+		companion.formation_slot = i + 1
+		var a: float = companion_angles[i]
 		companion.position = Vector3(cos(a) * 8.0, 0.0, sin(a) * 8.0)
 		companion.auto_hunt_disabled = false
 		add_child(companion)
@@ -579,23 +597,35 @@ func _build_hud() -> void:
 	var top := VBoxContainer.new()
 	top.anchor_right = 1.0
 	top.offset_left = 18
-	top.offset_top = 18
+	top.offset_top = 42
 	top.offset_right = -18
 	top.add_theme_constant_override("separation", 6)
 	root.add_child(top)
 	var info := HBoxContainer.new()
+	info.add_theme_constant_override("separation", 12)
 	top.add_child(info)
-	level_label = _hud_label("Lv. %d" % GameData.run_level, 22)
-	level_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	info.add_child(level_label)
-	time_label = _hud_label("00:00", 18)
-	time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var stage_lbl := _hud_label("ST %d" % (GameData.selected_stage + 1), 15)
+	info.add_child(stage_lbl)
+	time_label = _hud_label("00:00", 16)
 	time_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	top_time_label = time_label
 	info.add_child(time_label)
+	top_kills_label = _hud_label("처치 0", 14)
+	info.add_child(top_kills_label)
+	var pause_btn := _make_hud_button("Ⅱ", Vector2(48, 42))
+	pause_btn.pressed.connect(_toggle_pause)
+	info.add_child(pause_btn)
+
+	var status_row := HBoxContainer.new()
+	top.add_child(status_row)
+	level_label = _hud_label("Lv. %d" % GameData.run_level, 15)
+	level_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	status_row.add_child(level_label)
 	gold_label = _hud_label("골드 %d" % GameData.gold, 17)
 	gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	gold_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	info.add_child(gold_label)
+	status_row.add_child(gold_label)
 	# 기존 HP/EXP 바 제거 (캐릭터별 바 사용)
 
 	notification_label = _hud_label("", 23)
@@ -610,48 +640,59 @@ func _build_hud() -> void:
 
 	# 상단 캐릭터 바 제거
 
-	# 하단 4등분 캐릭터 패널
-	var bottom_panel := HBoxContainer.new()
-	bottom_panel.anchor_left = 0.0
-	bottom_panel.anchor_right = 1.0
+	# 3x2 캐릭터 상태 패널
+	var bottom_panel := GridContainer.new()
+	bottom_panel.columns = 3
+	bottom_panel.anchor_left = 0.04
+	bottom_panel.anchor_right = 0.96
 	bottom_panel.anchor_top = 1.0
 	bottom_panel.anchor_bottom = 1.0
-	bottom_panel.offset_top = -110
-	bottom_panel.offset_bottom = -8
-	bottom_panel.add_theme_constant_override("separation", 8)
+	bottom_panel.offset_top = -184
+	bottom_panel.offset_bottom = -20
+	bottom_panel.add_theme_constant_override("h_separation", 8)
+	bottom_panel.add_theme_constant_override("v_separation", 8)
 	root.add_child(bottom_panel)
-	var bottom_indices := []
-	for i in range(6):
-		var ci := i % GameData.CHARACTERS.size()
-		if ci == GameData.selected_character:
-			ci = (ci + 1) % GameData.CHARACTERS.size()
-		bottom_indices.append(ci)
 	var bidx := 0
 	for c in [player] + companions:
-		var panel := VBoxContainer.new()
+		var panel := PanelContainer.new()
+		panel.custom_minimum_size = Vector2(0, 76)
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		panel.mouse_filter = Control.MOUSE_FILTER_STOP
 		panel.gui_input.connect(func(event: InputEvent) -> void:
 			if event is InputEventMouseButton and event.pressed:
 				camera_target = c
 		)
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.06, 0.09, 0.12, 0.78)
+		style.border_color = Color("#d8c99e")
+		style.set_border_width_all(1)
+		style.set_corner_radius_all(8)
+		style.set_content_margin_all(8)
+		panel.add_theme_stylebox_override("panel", style)
+		var content := VBoxContainer.new()
+		content.add_theme_constant_override("separation", 4)
+		panel.add_child(content)
 		var name_row := HBoxContainer.new()
-		var name_lbl := _hud_label(str(GameData.CHARACTERS[bottom_indices[bidx]]["name"]), 12)
+		var character_index: int = (
+			GameData.selected_character if bidx == 0 else GameData.party_characters[bidx]
+		)
+		var character_name := str(GameData.CHARACTERS[character_index]["name"])
+		var name_lbl := _hud_label(character_name, 12)
 		var level_lbl := _hud_label("Lv.1", 11)
 		name_row.add_child(name_lbl)
-		name_row.add_child(level_lbl)
-		panel.add_child(name_row)
 		var spacer := Control.new()
-		spacer.custom_minimum_size = Vector2(0, 6)
-		panel.add_child(spacer)
+		spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_row.add_child(spacer)
+		name_row.add_child(level_lbl)
+		content.add_child(name_row)
 		var hp := _make_bar(Color("#db6558"))
-		hp.custom_minimum_size = Vector2(0, 12)
+		hp.custom_minimum_size = Vector2(0, 10)
 		hp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var exp := _make_bar(Color("#55c6d1"))
 		exp.custom_minimum_size = Vector2(0, 8)
 		exp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		panel.add_child(hp)
-		panel.add_child(exp)
+		content.add_child(hp)
+		content.add_child(exp)
 		c.level_changed.connect(func(new_level: int, _u: int) -> void:
 			level_lbl.text = "Lv.%d" % new_level
 		)
@@ -659,36 +700,14 @@ func _build_hud() -> void:
 		c.health_changed.connect(func(cur: float, maximum: float) -> void:
 			hp.max_value = maximum
 			hp.value = cur
+			name_lbl.text = "%s  ·  사망" % character_name if cur <= 0.0 else character_name
+			panel.modulate = Color(0.55, 0.55, 0.55) if cur <= 0.0 else Color.WHITE
 		)
 		c.experience_changed.connect(func(current: int, required: int) -> void:
 			exp.max_value = required
 			exp.value = current
 		)
 		bidx += 1
-	# 4칸 채우기 (빈 패널)
-	for i in range(4 - ([player] + companions).size()):
-		var spacer := Control.new()
-		spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		bottom_panel.add_child(spacer)
-
-	# 상단 전투 HUD
-	var top_bar := HBoxContainer.new()
-	top_bar.anchor_left = 0.0
-	top_bar.anchor_right = 1.0
-	top_bar.anchor_top = 0.0
-	top_bar.offset_top = 8
-	top_bar.offset_bottom = 32
-	top_bar.add_theme_constant_override("separation", 12)
-	root.add_child(top_bar)
-	var stage_lbl := _hud_label("ST %d" % (GameData.selected_stage + 1), 14)
-	top_bar.add_child(stage_lbl)
-	top_time_label = _hud_label("00:00", 14)
-	top_bar.add_child(top_time_label)
-	top_kills_label = _hud_label("처치 0", 14)
-	top_bar.add_child(top_kills_label)
-	var pause_btn := _make_hud_button("Ⅱ", Vector2(40, 28))
-	pause_btn.pressed.connect(_toggle_pause)
-	top_bar.add_child(pause_btn)
 
 	joystick = JoystickScript.new()
 	joystick.position = Vector2(22, -178)
@@ -834,6 +853,10 @@ func _spawn_monster() -> void:
 	enemy.position.z = clampf(enemy.position.z, -12.5, 12.5)
 	add_child(enemy)
 	alive_monsters.append(enemy)
+	var cell := _spatial_cell(enemy.global_position)
+	var cell_enemies: Array = monster_spatial_cells.get(cell, [])
+	cell_enemies.append(enemy)
+	monster_spatial_cells[cell] = cell_enemies
 
 
 func _choose_monster() -> Dictionary:
@@ -849,6 +872,9 @@ func _choose_monster() -> Dictionary:
 func perform_basic_attack(
 	attacker: Node3D, damage: float, attack_range: float, angle: float
 ) -> void:
+	var attacking_player := attacker as FieldPlayer
+	if attacking_player == null:
+		return
 	var facing := -attacker.global_transform.basis.z
 	facing.y = 0.0
 	if facing.length_squared() <= 0.01:
@@ -862,10 +888,11 @@ func perform_basic_attack(
 	)
 	var target: FieldMonster
 	var nearest_distance := attack_range
-	for enemy in alive_monsters:
-		if not is_instance_valid(enemy) or enemy.dead:
+	for enemy in get_enemies_near(attacker.global_position, attack_range):
+		var monster := enemy as FieldMonster
+		if not is_instance_valid(monster) or monster.dead:
 			continue
-		var from_player := enemy.global_position - attacker.global_position
+		var from_player := monster.global_position - attacker.global_position
 		from_player.y = 0.0
 		var distance := from_player.length()
 		if (
@@ -873,15 +900,15 @@ func perform_basic_attack(
 			and distance > 0.0
 			and from_player.normalized().dot(facing) >= cos(angle)
 		):
-			target = enemy
+			target = monster
 			nearest_distance = distance
 	if target == null:
 		return
 	var damage_type := "physical"
-	if player.attack_style == "magic":
+	if attacking_player.attack_style == "magic":
 		damage_type = "magic"
-	var final_damage := player.calculate_outgoing_damage(
-		damage, damage_type, player.attack_style == "ranged"
+	var final_damage := attacking_player.calculate_outgoing_damage(
+		damage, damage_type, attacking_player.attack_style == "ranged"
 	)
 	if final_damage <= 0.0:
 		_show_notification("빗나감!", 0.55)
@@ -911,7 +938,7 @@ func _toggle_map_view() -> void:
 func _on_skill_pressed(index: int) -> void:
 	if player == null or player.dead or paused:
 		return
-	if casting_skill_index >= 0 or player.skill_movement_locked:
+	if player.casting_skill_index >= 0 or player.skill_movement_locked:
 		return
 	var skill: Dictionary = CombatData.SKILLS[index]
 	if int(player.get("level")) < int(skill["unlock_level"]):
@@ -980,31 +1007,55 @@ func _deal_skill_damage(enemy: FieldMonster, damage: float, damage_type: String)
 		enemy.apply_damage(final_damage)
 
 
-func _auto_cast_combat(delta: float) -> void:
-	auto_attack_scan_timer -= delta
-	if auto_attack_scan_timer <= 0.0:
-		auto_attack_scan_timer = AUTO_ATTACK_SCAN_INTERVAL
-		var attack_range := player.attack_range * player.hitbox_size_multiplier
-		var target := _nearest_monster(player.global_position, attack_range)
-		if (
-			target != null
-			and player.attack_cooldown <= 0.0
-			and player.action_animation_remaining <= 0.0
-		):
-			_face_target(target)
-			player.try_basic_attack()
-
-	for index in range(CombatData.SKILLS.size()):
+func _auto_cast_combat() -> void:
+	if player == null or player.dead or player.casting_skill_index >= 0:
+		return
+	for index in AUTO_SKILL_PRIORITY:
 		var skill: Dictionary = CombatData.SKILLS[index]
 		if player.skill_cooldowns[index] > 0.0:
 			continue
 		if player.level < int(skill["unlock_level"]):
 			continue
 		var skill_range := float(skill["range"]) * player.hitbox_size_multiplier
-		if _nearest_monster(player.global_position, skill_range) == null:
+		var rule: Dictionary = CombatData.AUTO_SKILL_RULES.get(int(skill["id"]), {})
+		var target_count := _auto_skill_target_count(index, skill_range)
+		var strong_target := _has_strong_enemy(index, skill_range)
+		if (
+			target_count < int(rule.get("minimum_targets", 1))
+			and not (bool(rule.get("use_on_strong_target", false)) and strong_target)
+		):
 			continue
 		_on_skill_pressed(index)
-		break
+		if player.casting_skill_index >= 0:
+			return
+
+
+func _auto_skill_target_count(index: int, skill_range: float) -> int:
+	if index == 1:
+		var target := _nearest_monster(player.global_position, skill_range)
+		if target == null:
+			return 0
+		return _monsters_in_range(
+			target.global_position, 2.4 * player.hitbox_size_multiplier
+		).size()
+	return _monsters_in_range(player.global_position, skill_range).size()
+
+
+func _has_strong_enemy(index: int, skill_range: float) -> bool:
+	var targets: Array[FieldMonster]
+	if index == 1:
+		var nearest := _nearest_monster(player.global_position, skill_range)
+		if nearest == null:
+			return false
+		targets = _monsters_in_range(
+			nearest.global_position, 2.4 * player.hitbox_size_multiplier
+		)
+	else:
+		targets = _monsters_in_range(player.global_position, skill_range)
+	for enemy in targets:
+		if float(enemy.monster_data.get("hp", 0.0)) >= 150.0:
+			return true
+	return false
 
 
 func _face_target(target: FieldMonster) -> void:
@@ -1030,7 +1081,8 @@ func _nearest_character(origin: Vector3) -> FieldPlayer:
 func _nearest_monster(origin: Vector3, range_value: float) -> FieldMonster:
 	var nearest: FieldMonster
 	var nearest_distance := range_value
-	for enemy in alive_monsters:
+	for candidate in get_enemies_near(origin, range_value):
+		var enemy := candidate as FieldMonster
 		if not is_instance_valid(enemy) or enemy.get("dead"):
 			continue
 		var distance := origin.distance_to(enemy.global_position)
@@ -1040,22 +1092,52 @@ func _nearest_monster(origin: Vector3, range_value: float) -> FieldMonster:
 	return nearest
 
 
-func _companion_auto_attack(companion: FieldPlayer) -> void:
-	var attack_range := companion.attack_range * companion.hitbox_size_multiplier
-	var target := _nearest_monster(companion.global_position, attack_range)
-	if target != null and companion.attack_cooldown <= 0.0 and companion.action_animation_remaining <= 0.0:
-		var dir := target.global_position - companion.global_position
-		dir.y = 0.0
-		if dir.length_squared() > 0.001:
-			companion.rotation.y = atan2(-dir.x, -dir.z)
-		companion.try_basic_attack()
-
 func get_enemies() -> Array:
 	return alive_monsters
 
+
+func get_enemies_near(origin: Vector3, radius: float) -> Array:
+	var found: Array = []
+	var center_cell := _spatial_cell(origin)
+	var cell_radius := ceili(radius / SPATIAL_CELL_SIZE) + 1
+	for x in range(center_cell.x - cell_radius, center_cell.x + cell_radius + 1):
+		for z in range(center_cell.y - cell_radius, center_cell.y + cell_radius + 1):
+			var cell_enemies: Array = monster_spatial_cells.get(Vector2i(x, z), [])
+			for enemy in cell_enemies:
+				if not is_instance_valid(enemy):
+					continue
+				var monster := enemy as FieldMonster
+				if monster == null or monster.dead:
+					continue
+				var offset: Vector3 = monster.global_position - origin
+				offset.y = 0.0
+				if offset.length_squared() <= radius * radius:
+					found.append(monster)
+	return found
+
+
+func _rebuild_monster_spatial_index() -> void:
+	monster_spatial_cells.clear()
+	for enemy in alive_monsters:
+		if not is_instance_valid(enemy) or enemy.dead:
+			continue
+		var cell := _spatial_cell(enemy.global_position)
+		var cell_enemies: Array = monster_spatial_cells.get(cell, [])
+		cell_enemies.append(enemy)
+		monster_spatial_cells[cell] = cell_enemies
+
+
+func _spatial_cell(position: Vector3) -> Vector2i:
+	return Vector2i(
+		floori(position.x / SPATIAL_CELL_SIZE),
+		floori(position.z / SPATIAL_CELL_SIZE)
+	)
+
+
 func _monsters_in_range(origin: Vector3, range_value: float) -> Array[FieldMonster]:
 	var found: Array[FieldMonster] = []
-	for enemy in alive_monsters:
+	for candidate in get_enemies_near(origin, range_value):
+		var enemy := candidate as FieldMonster
 		if is_instance_valid(enemy) and not enemy.get("dead"):
 			if origin.distance_to(enemy.global_position) <= range_value:
 				found.append(enemy)
@@ -1105,13 +1187,9 @@ func _show_hitbox(mesh: Mesh, at: Vector3, yaw: float, color: Color) -> void:
 	tween.tween_callback(visual.queue_free)
 
 
-func monster_defeated(at: Vector3, data: Dictionary) -> void:
+func monster_defeated(at: Vector3, data: Dictionary, defeated_monster: FieldMonster) -> void:
 	total_kills += 1
-	var living_monsters: Array[FieldMonster] = []
-	for enemy in alive_monsters:
-		if is_instance_valid(enemy) and not enemy.dead:
-			living_monsters.append(enemy)
-	alive_monsters = living_monsters
+	alive_monsters.erase(defeated_monster)
 	var target := _nearest_character(at)
 	if is_instance_valid(target):
 		target.gain_experience(int(data["exp"]))
@@ -1128,7 +1206,8 @@ func monster_defeated(at: Vector3, data: Dictionary) -> void:
 		GameData.hero_levels[idx] = cur_level
 		GameData.hero_experience[idx] = cur_exp
 	if random.randf() < float(CombatData.DROP_RULES["gold_chance"]):
-		GameData.add_gold(int(data["gold"]))
+		GameData.add_gold(int(data["gold"]), false)
+		_queue_progress_save()
 		gold_label.text = "골드 %d" % GameData.gold
 
 
@@ -1154,12 +1233,20 @@ func collect_drop(kind: String, amount: int) -> bool:
 			GameAudio.play_sfx("potion")
 			_show_notification("HP +%d" % amount, 1.2)
 		"gold":
-			GameData.add_gold(amount)
+			GameData.add_gold(amount, false)
+			_queue_progress_save()
 			GameData.run_gold_reward += amount
 			GameAudio.play_sfx("gold")
 			gold_label.text = "골드 %d" % GameData.gold
 			_show_notification("+%d 골드" % amount, 1.0)
 	return true
+
+
+func _queue_progress_save() -> void:
+	if progress_save_pending:
+		return
+	progress_save_pending = true
+	progress_save_timer = 0.0
 
 
 func show_damage_number(at: Vector3, amount: float, is_player_damage: bool) -> void:
@@ -1274,6 +1361,7 @@ func _choose_level_up_card(card_id: String) -> void:
 
 func _on_player_died() -> void:
 	GameData.run_won = false
+	_store_run_result()
 	GameData.save_game()
 	GameAudio.play_sfx("death")
 	_show_notification("쓰러졌습니다. 획득 골드 %d" % GameData.run_gold_reward, 4.0)
@@ -1376,11 +1464,17 @@ func _show_end_panel(title: String, message: String) -> void:
 	panel_root.process_mode = Node.PROCESS_MODE_ALWAYS
 	hud_layer.add_child(panel_root)
 	pause_root = panel_root
+	var shade := ColorRect.new()
+	shade.color = Color(0.02, 0.04, 0.06, 0.72)
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	shade.process_mode = Node.PROCESS_MODE_ALWAYS
+	panel_root.add_child(shade)
 	pause_panel = PanelContainer.new()
-	pause_panel.anchor_left = 0.12
-	pause_panel.anchor_top = 0.36
-	pause_panel.anchor_right = 0.88
-	pause_panel.anchor_bottom = 0.63
+	pause_panel.anchor_left = 0.08
+	pause_panel.anchor_top = 0.2
+	pause_panel.anchor_right = 0.92
+	pause_panel.anchor_bottom = 0.8
 	pause_panel.process_mode = Node.PROCESS_MODE_ALWAYS
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("#fff9e9")
@@ -1397,16 +1491,80 @@ func _show_end_panel(title: String, message: String) -> void:
 	heading.add_theme_color_override("font_color", Color("#28313d"))
 	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	content.add_child(heading)
-	var detail := _hud_label(message, 18)
-	detail.add_theme_color_override("font_color", Color("#53606a"))
-	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	content.add_child(detail)
+	pause_detail_label = _hud_label(message, 18)
+	pause_detail_label.add_theme_color_override("font_color", Color("#53606a"))
+	pause_detail_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	content.add_child(pause_detail_label)
 	if player != null and not player.dead:
 		_add_panel_button(content, "계속하기", _toggle_pause)
+		_add_panel_button(content, "전투 정보", _show_battle_info)
+		_add_panel_button(content, "설정", _show_pause_settings)
+		_add_panel_button(content, "메인 허브 (전투 종료)", _return_to_menu)
 	else:
 		_add_panel_button(content, "결과 보기", _return_to_result)
-	_add_panel_button(content, "메인 메뉴", _return_to_menu)
+		_add_panel_button(content, "메인 허브 (전투 종료)", _return_to_menu)
 	_update_skill_button_states()
+
+
+func _show_battle_info() -> void:
+	if pause_detail_label == null:
+		return
+	pause_detail_label.text = (
+		"스테이지 %d  ·  생존 %02d:%02d\n처치 %d  ·  Lv.%d"
+		% [
+			GameData.selected_stage + 1,
+			int(elapsed_time / 60.0),
+			int(elapsed_time) % 60,
+			total_kills,
+			player.get("level") if player != null else 1,
+		]
+	)
+
+
+func _show_pause_settings() -> void:
+	if pause_panel == null:
+		return
+	for child in pause_panel.get_children():
+		child.queue_free()
+	var content := VBoxContainer.new()
+	content.alignment = BoxContainer.ALIGNMENT_CENTER
+	content.add_theme_constant_override("separation", 14)
+	pause_panel.add_child(content)
+	var heading := _hud_label("설정", 28)
+	heading.add_theme_color_override("font_color", Color("#28313d"))
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	content.add_child(heading)
+	var sound_button := _make_hud_button(
+		"효과음  ·  %s" % ("켜짐" if GameData.sound_enabled else "꺼짐"),
+		Vector2(0, 56)
+	)
+	sound_button.add_theme_color_override("font_color", Color("#28313d"))
+	sound_button.pressed.connect(_toggle_pause_sound)
+	content.add_child(sound_button)
+	var vibration_button := _make_hud_button(
+		"진동  ·  %s" % ("켜짐" if GameData.vibration_enabled else "꺼짐"),
+		Vector2(0, 56)
+	)
+	vibration_button.add_theme_color_override("font_color", Color("#28313d"))
+	vibration_button.pressed.connect(_toggle_pause_vibration)
+	content.add_child(vibration_button)
+	_add_panel_button(content, "일시정지 메뉴", _show_pause_menu)
+
+
+func _show_pause_menu() -> void:
+	_show_end_panel("PAUSED", "전투 일시정지")
+
+
+func _toggle_pause_sound() -> void:
+	GameData.sound_enabled = not GameData.sound_enabled
+	GameData.save_game()
+	_show_pause_settings()
+
+
+func _toggle_pause_vibration() -> void:
+	GameData.vibration_enabled = not GameData.vibration_enabled
+	GameData.save_game()
+	_show_pause_settings()
 
 
 func _add_panel_button(parent: VBoxContainer, title: String, action: Callable) -> void:
@@ -1429,12 +1587,20 @@ func _update_skill_button_states() -> void:
 
 func _return_to_menu() -> void:
 	get_tree().paused = false
+	GameData.save_game()
 	ScreenRouter.go("main_menu")
 
 
 func _return_to_result() -> void:
+	_store_run_result()
+	GameData.save_game()
 	get_tree().paused = false
 	ScreenRouter.go("result")
+
+
+func _store_run_result() -> void:
+	GameData.run_elapsed_time = elapsed_time
+	GameData.run_kill_count = total_kills
 
 
 func _build_field_decorations() -> void:

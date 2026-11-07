@@ -48,6 +48,13 @@ const SKILLS := [
 	},
 ]
 
+const AUTO_SKILL_RULES := {
+	1: {"minimum_targets": 2, "use_on_strong_target": true},
+	2: {"minimum_targets": 2, "use_on_strong_target": true},
+	3: {"minimum_targets": 2, "use_on_strong_target": true},
+	4: {"minimum_targets": 3, "use_on_strong_target": true},
+}
+
 const DROP_RULES := {
 	"gold_chance": 0.6,
 	"potion_chance": 0.12,

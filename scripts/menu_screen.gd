@@ -10,8 +10,11 @@ const LINE := Color("#d8c99e")
 @export var screen_id := "main_menu"
 
 var page_body: VBoxContainer
+var action_bar: VBoxContainer
 var footer: HBoxContainer
 var status_label: Label
+var collection_filter := "영웅"
+var hero_detail_tab := "능력치"
 
 
 func _ready() -> void:
@@ -29,13 +32,13 @@ func _build_shell() -> void:
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	margin.add_theme_constant_override("margin_left", 24)
-	margin.add_theme_constant_override("margin_top", 22)
+	margin.add_theme_constant_override("margin_top", 34)
 	margin.add_theme_constant_override("margin_right", 24)
-	margin.add_theme_constant_override("margin_bottom", 22)
+	margin.add_theme_constant_override("margin_bottom", 34)
 	add_child(margin)
 
 	var layout := VBoxContainer.new()
-	layout.add_theme_constant_override("separation", 14)
+	layout.add_theme_constant_override("separation", 10)
 	margin.add_child(layout)
 
 	var header := _make_header()
@@ -49,6 +52,10 @@ func _build_shell() -> void:
 	page_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	page_body.add_theme_constant_override("separation", 14)
 	scroll.add_child(page_body)
+
+	action_bar = VBoxContainer.new()
+	action_bar.add_theme_constant_override("separation", 8)
+	layout.add_child(action_bar)
 
 	footer = HBoxContainer.new()
 	footer.add_theme_constant_override("separation", 8)
@@ -100,6 +107,8 @@ func _build_page() -> void:
 			_build_growth()
 		"collection":
 			_build_collection()
+		"hero_detail":
+			_build_hero_detail()
 		"settings":
 			_build_settings()
 		_:
@@ -107,20 +116,20 @@ func _build_page() -> void:
 
 
 func _build_main_menu() -> void:
-	_add_text_card("PIXEL QUEST", "작은 영웅의 큰 모험")
-	page_body.add_child(_label("Lv.%d  |  골드 %d  |  보석 %d" % [GameData.player_level, GameData.gold, GameData.gems], 16, GOLD_DARK))
+	_add_text_card("모험가의 기록", "오늘도 새로운 모험을 시작해 보세요.")
 	_add_hero_card()
-	_add_text_card("오늘도 모험을 떠나 볼까요?", "간결한 한 판 액션 로그라이크")
-	_add_action("전투 시작", func(): _go("character_select"), true)
-	footer.add_child(_footer_button("영웅", "character_select"))
+	_add_action("전투 준비", _begin_party_selection, true)
+	footer.add_child(_footer_button("영웅", "collection"))
 	footer.add_child(_footer_button("영구 성장", "permanent_growth"))
 	footer.add_child(_footer_button("도감", "collection"))
-	footer.add_child(_footer_button("업적", "collection"))
 	footer.add_child(_footer_button("설정", "settings"))
 
 
 func _build_character_select() -> void:
-	_add_text_card("모험가를 선택하세요", "직업마다 무기와 패시브가 달라요.")
+	_add_text_card(
+		"출전 슬롯 %d 선택" % (GameData.selected_party_slot + 1),
+		"직업마다 무기와 패시브가 달라요."
+	)
 	for i in range(GameData.CHARACTERS.size()):
 		var character: Dictionary = GameData.CHARACTERS[i]
 		var card := _panel()
@@ -192,18 +201,28 @@ func _build_stage_select() -> void:
 		column.add_child(_label("%s   |   권장 레벨 %d" % [stage["subtitle"], stage["level"]], 15, INK))
 		column.add_child(_label("몬스터  %s" % stage["monsters"], 15, MUTED))
 		column.add_child(_label("보상  %s" % stage["reward"], 15, GOLD_DARK))
-	var party_row := HBoxContainer.new()
-	party_row.add_theme_constant_override("separation", 8)
-	page_body.add_child(party_row)
-	var slot_indices := [GameData.selected_character, 1, 0, 1]
-	for i in range(4):
-		var slot := _panel()
-		slot.custom_minimum_size = Vector2(0, 64)
+	var party_grid := GridContainer.new()
+	party_grid.columns = 2
+	party_grid.add_theme_constant_override("h_separation", 8)
+	party_grid.add_theme_constant_override("v_separation", 8)
+	page_body.add_child(party_grid)
+	for i in range(GameData.party_characters.size()):
+		var slot := _panel_in(party_grid)
+		slot.custom_minimum_size = Vector2(0, 82)
 		var col := _column_in(slot)
-		var idx: int = slot_indices[i] if slot_indices[i] < GameData.CHARACTERS.size() else 0
-		col.add_child(_label("슬롯 %d" % (i + 1), 12, MUTED))
-		col.add_child(_label(GameData.CHARACTERS[idx]["name"], 15, INK))
-		party_row.add_child(slot)
+		var idx := clampi(GameData.party_characters[i], 0, GameData.CHARACTERS.size() - 1)
+		var select := _button(
+			"슬롯 %d  ·  %s  ·  Lv.%d" % [
+				i + 1,
+				GameData.CHARACTERS[idx]["name"],
+				GameData.hero_levels.get(idx, 1)
+			],
+			idx == GameData.selected_character,
+			52
+		)
+		select.pressed.connect(_open_party_slot.bind(i))
+		col.add_child(select)
+		col.add_child(_label("터치하여 영웅 변경", 13, MUTED))
 	_add_action("전투 시작", _start_battle, true)
 
 
@@ -258,8 +277,29 @@ func _build_result() -> void:
 	)
 	_add_text_card(title, description)
 	_add_hero_card()
-	_add_text_card("획득 골드", "+%d" % GameData.run_gold_reward)
-	_add_text_card("획득 경험치", "+%d" % GameData.run_experience_reward)
+	_add_text_card(
+		"전투 기록",
+		"생존 %02d:%02d  ·  처치 %d\n획득 골드 %d  ·  획득 EXP %d"
+		% [
+			int(GameData.run_elapsed_time / 60.0),
+			int(GameData.run_elapsed_time) % 60,
+			GameData.run_kill_count,
+			GameData.run_gold_reward,
+			GameData.run_experience_reward,
+		]
+	)
+	_add_text_card("파티 성장", "이번 전투에 참여한 영웅의 레벨 변화")
+	var displayed_heroes: Dictionary = {}
+	for index in GameData.party_characters:
+		if displayed_heroes.has(index):
+			continue
+		displayed_heroes[index] = true
+		var before := int(GameData.run_start_hero_levels.get(index, GameData.hero_levels.get(index, 1)))
+		var after := int(GameData.hero_levels.get(index, 1))
+		_add_text_card(
+			str(GameData.CHARACTERS[index]["name"]),
+			"Lv.%d → Lv.%d" % [before, after]
+		)
 	_add_action("다시 모험하기", func(): _go("stage_select"), true)
 	_add_action("메인 메뉴", func(): _go("main_menu"))
 
@@ -292,16 +332,112 @@ func _build_growth() -> void:
 
 
 func _build_collection() -> void:
-	_add_text_card("모험 도감", "지금까지 만난 동료와 몬스터")
-	for i in range(GameData.CHARACTERS.size()):
-		var character: Dictionary = GameData.CHARACTERS[i]
-		_add_text_card(
-			"동료  ·  %s  (Lv.%d)" % [character["name"], GameData.hero_levels.get(i, 1)],
-			"%s  |  %s" % [character["weapon"], character["passive"]]
-		)
-	for stage in GameData.STAGES:
-		_add_text_card("지역  ·  %s" % stage["name"], "몬스터  %s" % stage["monsters"])
+	_add_text_card(
+		"%s 도감" % collection_filter,
+		"등록 항목  %d종" % _game_collection_count()
+	)
+	var filters := HBoxContainer.new()
+	filters.add_theme_constant_override("separation", 6)
+	page_body.add_child(filters)
+	for filter_name in ["영웅", "몬스터", "스킬", "장비"]:
+		var filter := _button(filter_name, filter_name == collection_filter, 48)
+		filter.pressed.connect(_set_collection_filter.bind(filter_name))
+		filter.add_theme_font_size_override("font_size", 14)
+		filters.add_child(filter)
+
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	if collection_filter != "영웅":
+		page_body.add_child(grid)
+	match collection_filter:
+		"영웅":
+			_build_hero_collection_grid()
+		"몬스터":
+			for monster in CombatData.MONSTERS:
+				_add_codex_card(
+					str(monster["name"]),
+					"HP %d  ·  공격력 %d" % [int(monster["hp"]), int(monster["attack"])],
+					"경험치 %d  ·  골드 %d" % [int(monster["exp"]), int(monster["gold"])],
+					grid
+				)
+		"스킬":
+			for skill in CombatData.SKILLS:
+				_add_codex_card(
+					str(skill["name"]),
+					"해금 Lv.%d  ·  피해 %d" % [skill["unlock_level"], int(skill["damage"])],
+					"사거리 %.1f  ·  재사용 %.1f초" % [skill["range"], skill["cooldown"]],
+					grid
+				)
+		"장비":
+			for character in GameData.CHARACTERS:
+				_add_codex_card(
+					str(character["weapon"]),
+					"사용 영웅  ·  %s" % character["name"],
+					"전투 시작 무기",
+					grid
+				)
 	_add_action("메인 메뉴", func(): _go("main_menu"))
+
+
+func _build_hero_detail() -> void:
+	var index := clampi(GameData.selected_detail_character, 0, GameData.CHARACTERS.size() - 1)
+	var character: Dictionary = GameData.CHARACTERS[index]
+	var level := int(GameData.hero_levels.get(index, 1))
+	_add_hero_card(index)
+	_add_text_card(
+		"%s  ·  Lv.%d" % [character["name"], level],
+		"%s\n%s" % [character["title"], character["passive"]]
+	)
+	var experience := int(GameData.hero_experience.get(index, 0))
+	var required_experience := 100 + level * 50
+	var experience_panel := _panel()
+	var experience_column := _column_in(experience_panel)
+	experience_column.add_child(
+		_label("경험치  %d / %d" % [experience, required_experience], 14, MUTED)
+	)
+	var experience_bar := ProgressBar.new()
+	experience_bar.custom_minimum_size.y = 18
+	experience_bar.max_value = required_experience
+	experience_bar.value = experience
+	experience_bar.show_percentage = false
+	experience_column.add_child(experience_bar)
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 6)
+	page_body.add_child(tabs)
+	for tab_name in ["능력치", "스킬", "장비"]:
+		var tab := _button(tab_name, tab_name == hero_detail_tab, 48)
+		tab.add_theme_font_size_override("font_size", 14)
+		tab.pressed.connect(_set_hero_detail_tab.bind(tab_name))
+		tabs.add_child(tab)
+
+	match hero_detail_tab:
+		"능력치":
+			var attributes: Dictionary = character["attributes"]
+			for key in ["STR", "AGI", "VIT", "INT", "DEX", "LUK"]:
+				_add_stat_row(key, int(attributes[key]) + int(GameData.permanent_stats.get(key, 0)))
+		"스킬":
+			for skill in CombatData.SKILLS:
+				_add_codex_card(
+					str(skill["name"]),
+					"해금 Lv.%d  ·  피해 %d" % [skill["unlock_level"], int(skill["damage"])]
+				)
+		"장비":
+			_add_text_card("무기", str(character["weapon"]))
+			_add_text_card("패시브", str(character["passive"]))
+	var growth_actions := HBoxContainer.new()
+	growth_actions.add_theme_constant_override("separation", 8)
+	action_bar.add_child(growth_actions)
+	var level_up := _button("레벨업", false, 62)
+	level_up.disabled = true
+	level_up.tooltip_text = "전투에서 영웅 경험치를 획득하면 자동으로 레벨업합니다."
+	growth_actions.add_child(level_up)
+	var promote := _button("승급", false, 62)
+	promote.disabled = true
+	promote.tooltip_text = "승급 기능은 아직 사용할 수 없습니다."
+	growth_actions.add_child(promote)
+	_add_action("영웅 목록", func(): _go("collection"))
 
 
 func _build_settings() -> void:
@@ -312,22 +448,109 @@ func _build_settings() -> void:
 	_add_action("메인 메뉴", func(): _go("main_menu"))
 
 
-func _add_hero_card() -> void:
-	var character: Dictionary = GameData.CHARACTERS[GameData.selected_character]
+func _add_hero_card(character_index: int = -1) -> void:
+	var requested_index := GameData.selected_character if character_index < 0 else character_index
+	var index := clampi(requested_index, 0, GameData.CHARACTERS.size() - 1)
+	var character: Dictionary = GameData.CHARACTERS[index]
+	var portrait_height := 450 if screen_id == "main_menu" else 330 if screen_id == "hero_detail" else 250
 	var card := _panel()
 	var column := _column_in(card)
 	var center := CenterContainer.new()
-	center.custom_minimum_size.y = 220
+	center.custom_minimum_size.y = portrait_height + 40
 	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.add_child(center)
-	var art := Control.new()
-	art.custom_minimum_size = Vector2(150, 210)
-	center.add_child(art)
-	_add_pixel_hero(art, character["color"])
+	center.add_child(_hero_portrait(index, portrait_height))
 	column.add_child(_label(character["name"], 23, INK, HORIZONTAL_ALIGNMENT_CENTER))
 	column.add_child(
-		_label("Lv.%d 모험가" % GameData.player_level, 15, MUTED, HORIZONTAL_ALIGNMENT_CENTER)
+		_label(
+			"Lv.%d 모험가" % GameData.hero_levels.get(index, 1),
+			15,
+			MUTED,
+			HORIZONTAL_ALIGNMENT_CENTER
+		)
 	)
+
+
+func _hero_portrait(index: int, height: int) -> Control:
+	var character: Dictionary = GameData.CHARACTERS[index]
+	var frame := PanelContainer.new()
+	frame.custom_minimum_size = Vector2(0, height)
+	frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var frame_style := StyleBoxFlat.new()
+	var character_color: Color = character["color"]
+	frame_style.bg_color = character_color.darkened(0.55)
+	frame_style.set_corner_radius_all(12)
+	frame.add_theme_stylebox_override("panel", frame_style)
+
+	var visual: Dictionary = character.get("visual", {})
+	var scene_path := str(visual.get("scene", ""))
+	if not scene_path.is_empty() and ResourceLoader.exists(scene_path):
+		var viewport_container := SubViewportContainer.new()
+		viewport_container.stretch = true
+		viewport_container.mouse_filter = Control.MOUSE_FILTER_STOP
+		viewport_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		viewport_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		frame.add_child(viewport_container)
+		var viewport := SubViewport.new()
+		viewport.size = Vector2i(300, height)
+		viewport.transparent_bg = true
+		viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		viewport_container.add_child(viewport)
+		var world := Node3D.new()
+		viewport.add_child(world)
+		var camera := Camera3D.new()
+		camera.position = Vector3(0, 1.2, 3.8)
+		camera.rotation.x = deg_to_rad(-4.5)
+		world.add_child(camera)
+		camera.call_deferred("make_current")
+		var light := DirectionalLight3D.new()
+		light.rotation_degrees = Vector3(-35, -25, 0)
+		light.light_energy = 1.5
+		world.add_child(light)
+		var model_resource := load(scene_path)
+		if model_resource is PackedScene:
+			var model := (model_resource as PackedScene).instantiate() as Node3D
+			if model != null:
+				model.scale = Vector3.ONE * float(visual.get("scale", 1.0))
+				model.position.y = float(visual.get("vertical_offset", 0.0))
+				model.rotation_degrees.y = float(visual.get("forward_rotation_degrees", 0.0))
+				world.add_child(model)
+				viewport_container.gui_input.connect(_rotate_hero_preview.bind(model))
+		return frame
+
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	frame.add_child(center)
+	var art := Control.new()
+	art.custom_minimum_size = Vector2(150, 182)
+	center.add_child(art)
+	_add_pixel_hero(art, character["color"])
+	return frame
+
+
+func _rotate_hero_preview(event: InputEvent, model: Node3D) -> void:
+	if not is_instance_valid(model):
+		return
+	var drag_x := 0.0
+	if event is InputEventScreenDrag:
+		drag_x = event.relative.x
+	elif (
+		event is InputEventMouseMotion
+		and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0
+	):
+		drag_x = event.relative.x
+	if drag_x != 0.0:
+		model.rotate_y(-drag_x * 0.01)
+
+
+func _add_stat_row(name: String, value: int) -> void:
+	var row := _panel()
+	var line := HBoxContainer.new()
+	row.add_child(line)
+	var stat_name := _label(name, 16, INK)
+	stat_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line.add_child(stat_name)
+	line.add_child(_label(str(value), 16, GOLD_DARK))
 
 
 func _add_pixel_hero(art: Control, tunic: Color) -> void:
@@ -391,10 +614,14 @@ func _add_text_card(title: String, description: String) -> void:
 func _add_action(text: String, action: Callable, primary := false) -> void:
 	var control := _button(text, primary, 74 if primary else 62)
 	control.pressed.connect(action)
-	page_body.add_child(control)
+	action_bar.add_child(control)
 
 
 func _panel() -> PanelContainer:
+	return _panel_in(page_body)
+
+
+func _panel_in(parent: Control) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var style := StyleBoxFlat.new()
@@ -403,8 +630,65 @@ func _panel() -> PanelContainer:
 	style.set_border_width_all(2)
 	style.set_content_margin_all(14)
 	panel.add_theme_stylebox_override("panel", style)
-	page_body.add_child(panel)
+	parent.add_child(panel)
 	return panel
+
+
+func _build_hero_collection_grid() -> void:
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	page_body.add_child(grid)
+	for i in range(GameData.CHARACTERS.size()):
+		var character: Dictionary = GameData.CHARACTERS[i]
+		var card := _panel_in(grid)
+		card.custom_minimum_size = Vector2(0, 220)
+		var column := _column_in(card)
+		column.add_child(_hero_portrait(i, 120))
+		column.add_child(_label(character["name"], 17, INK))
+		column.add_child(
+			_label("보유  ·  Lv.%d" % GameData.hero_levels.get(i, 1), 13, GOLD_DARK)
+		)
+		var detail := _button("상세 보기", false, 44)
+		detail.pressed.connect(_open_hero_detail.bind(i))
+		column.add_child(detail)
+
+
+func _add_codex_card(
+	title: String, description: String, detail: String = "", parent: Control = null
+) -> void:
+	var card := _panel_in(page_body if parent == null else parent)
+	card.custom_minimum_size = Vector2(0, 150)
+	var column := _column_in(card)
+	column.add_child(_label(title, 18, INK))
+	column.add_child(_label(description, 14, MUTED))
+	if not detail.is_empty():
+		var more := _button("상세 정보", false, 42)
+		more.pressed.connect(_show_status.bind(detail))
+		column.add_child(more)
+
+
+func _set_collection_filter(filter_name: String) -> void:
+	collection_filter = filter_name
+	for child in page_body.get_children():
+		child.queue_free()
+	for child in action_bar.get_children():
+		child.queue_free()
+	_build_collection()
+
+
+func _game_collection_count() -> int:
+	match collection_filter:
+		"영웅":
+			return GameData.CHARACTERS.size()
+		"몬스터":
+			return CombatData.MONSTERS.size()
+		"스킬":
+			return CombatData.SKILLS.size()
+		"장비":
+			return GameData.CHARACTERS.size()
+	return 0
 
 
 func _column_in(parent: Control) -> VBoxContainer:
@@ -472,6 +756,7 @@ func _screen_title() -> String:
 		"result": "모험 결과",
 		"permanent_growth": "영구 성장",
 		"collection": "모험 도감",
+		"hero_detail": "영웅 상세",
 		"settings": "설정",
 	}
 	return titles.get(screen_id, "모험")
@@ -482,6 +767,9 @@ func _go(target: String) -> void:
 
 
 func _go_back() -> void:
+	if screen_id == "character_select" and GameData.selected_party_slot > 0:
+		_go("stage_select")
+		return
 	var destinations := {
 		"character_select": "main_menu",
 		"stage_select": "character_select",
@@ -492,15 +780,42 @@ func _go_back() -> void:
 		"result": "main_menu",
 		"permanent_growth": "main_menu",
 		"collection": "main_menu",
+		"hero_detail": "collection",
 		"settings": "main_menu",
 	}
 	_go(destinations.get(screen_id, "main_menu"))
 
 
-func _select_character(index: int) -> void:
-	GameData.selected_character = index
-	GameData.save_game()
+func _open_hero_detail(index: int) -> void:
+	GameData.selected_detail_character = index
+	_go("hero_detail")
+
+
+func _open_party_slot(slot_index: int) -> void:
+	GameData.selected_party_slot = slot_index
 	_go("character_select")
+
+
+func _begin_party_selection() -> void:
+	GameData.selected_party_slot = 0
+	_go("character_select")
+
+
+func _set_hero_detail_tab(tab_name: String) -> void:
+	hero_detail_tab = tab_name
+	for child in page_body.get_children():
+		child.queue_free()
+	for child in action_bar.get_children():
+		child.queue_free()
+	_build_hero_detail()
+
+
+func _select_character(index: int) -> void:
+	GameData.party_characters[GameData.selected_party_slot] = index
+	if GameData.selected_party_slot == 0:
+		GameData.selected_character = index
+	GameData.save_game()
+	_go("stage_select")
 
 
 func _select_stage(index: int) -> void:

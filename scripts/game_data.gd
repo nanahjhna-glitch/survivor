@@ -1,5 +1,6 @@
 extends Node
 
+const PARTY_SIZE := 6
 const SAVE_PATH := "user://survivor_save.cfg"
 
 const CHARACTERS := [
@@ -183,6 +184,9 @@ var player_level := 1
 var gold := 500
 var gems := 25
 var selected_character := 0
+var selected_detail_character := 0
+var party_characters: Array[int] = [0, 1, 2, 3, 0, 1]
+var selected_party_slot := 0
 var selected_stage := 0
 var permanent_stats: Dictionary = {
 	"STR": 0,
@@ -196,6 +200,9 @@ var sound_enabled := true
 var vibration_enabled := true
 var run_gold_reward := 0
 var run_experience_reward := 0
+var run_elapsed_time := 0.0
+var run_kill_count := 0
+var run_start_hero_levels: Dictionary = {}
 var run_won := true
 var run_level := 1
 var run_upgrades: Dictionary = {"power": 0, "vitality": 0, "fortune": 0}
@@ -223,6 +230,12 @@ func load_game() -> void:
 	selected_character = clampi(
 		int(config.get_value("profile", "character", 0)), 0, CHARACTERS.size() - 1
 	)
+	var saved_party: Variant = config.get_value("profile", "party", [])
+	if saved_party is Array:
+		for i in range(mini(PARTY_SIZE, saved_party.size())):
+			party_characters[i] = clampi(int(saved_party[i]), 0, CHARACTERS.size() - 1)
+	if not party_characters.is_empty():
+		party_characters[0] = selected_character
 	selected_stage = clampi(int(config.get_value("profile", "stage", 0)), 0, STAGES.size() - 1)
 	var saved_stats: Variant = config.get_value(
 		"growth", "permanent_stats", config.get_value("growth", "upgrades", {})
@@ -249,6 +262,7 @@ func save_game() -> void:
 	config.set_value("profile", "gold", gold)
 	config.set_value("profile", "gems", gems)
 	config.set_value("profile", "character", selected_character)
+	config.set_value("profile", "party", party_characters)
 	config.set_value("profile", "stage", selected_stage)
 	config.set_value("growth", "permanent_stats", permanent_stats)
 	for i in range(CHARACTERS.size()):
@@ -269,13 +283,18 @@ func spend_gold(amount: int) -> bool:
 	return true
 
 
-func add_gold(amount: int) -> void:
+func add_gold(amount: int, save_immediately := true) -> void:
 	gold += maxi(0, amount)
-	save_game()
+	if save_immediately:
+		save_game()
 
 
 func begin_run() -> void:
 	run_gold_reward = 0
+	run_experience_reward = 0
+	run_elapsed_time = 0.0
+	run_kill_count = 0
+	run_start_hero_levels = hero_levels.duplicate()
 	run_won = true
 	player_level = 1
 	run_level = 1
