@@ -602,8 +602,8 @@ func _build_hud() -> void:
 	bottom_panel.anchor_right = 1.0
 	bottom_panel.anchor_top = 1.0
 	bottom_panel.anchor_bottom = 1.0
-	bottom_panel.offset_top = -90
-	bottom_panel.offset_bottom = -10
+	bottom_panel.offset_top = -110
+	bottom_panel.offset_bottom = -8
 	bottom_panel.add_theme_constant_override("separation", 8)
 	root.add_child(bottom_panel)
 	var bottom_indices := [GameData.selected_character, companion_character_index]
