@@ -153,6 +153,14 @@ func _build_character_select() -> void:
 			)
 		)
 		column.add_child(_label("패시브  %s" % character["passive"], 15, GOLD_DARK))
+		column.add_child(
+			_label(
+				"영웅 Lv.%d  EXP %d"
+				% [GameData.hero_levels.get(i, 1), GameData.hero_experience.get(i, 0)],
+				14,
+				MUTED
+			)
+		)
 	_add_hero_card()
 	_add_action("스테이지 선택", func(): _go("stage_select"), true)
 
