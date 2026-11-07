@@ -901,9 +901,9 @@ func _toggle_map_view() -> void:
 	map_view_toggled = not map_view_toggled
 	if map_view_toggled:
 		camera_target = null
-		camera_distance = 34.0
-		camera_pitch = -1.4
-		camera_yaw = 0.0
+		camera_distance = 40.0
+		camera_pitch = -0.6
+		camera_yaw = 0.785
 	else:
 		camera_target = null
 		camera_yaw = 0.785
@@ -1317,7 +1317,9 @@ func _update_camera(delta: float = 1.0 / 60.0) -> void:
 	if player == null or camera == null:
 		return
 	var target_origin: Vector3
-	if camera_target != null and is_instance_valid(camera_target) and not camera_target.dead:
+	if map_view_toggled:
+		target_origin = Vector3.ZERO
+	elif camera_target != null and is_instance_valid(camera_target) and not camera_target.dead:
 		target_origin = camera_target.get_global_transform_interpolated().origin
 		camera_distance = 6.0
 		camera_pitch = -0.35
