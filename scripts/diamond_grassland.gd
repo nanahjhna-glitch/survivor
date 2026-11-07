@@ -1117,6 +1117,16 @@ func monster_defeated(at: Vector3, data: Dictionary) -> void:
 		target.gain_experience(int(data["exp"]))
 		var idx := target.character_index
 		GameData.hero_experience[idx] = int(GameData.hero_experience.get(idx, 0)) + int(data["exp"])
+		GameData.run_experience_reward += int(data["exp"])
+		var cur_level := int(GameData.hero_levels.get(idx, 1))
+		var cur_exp := int(GameData.hero_experience.get(idx, 0))
+		var need := 100 + cur_level * 50
+		while cur_exp >= need:
+			cur_exp -= need
+			cur_level += 1
+			need = 100 + cur_level * 50
+		GameData.hero_levels[idx] = cur_level
+		GameData.hero_experience[idx] = cur_exp
 	if random.randf() < float(CombatData.DROP_RULES["gold_chance"]):
 		GameData.add_gold(int(data["gold"]))
 		gold_label.text = "골드 %d" % GameData.gold

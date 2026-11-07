@@ -195,6 +195,7 @@ var permanent_stats: Dictionary = {
 var sound_enabled := true
 var vibration_enabled := true
 var run_gold_reward := 0
+var run_experience_reward := 0
 var run_won := true
 var run_level := 1
 var run_upgrades: Dictionary = {"power": 0, "vitality": 0, "fortune": 0}

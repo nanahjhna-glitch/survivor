@@ -251,6 +251,7 @@ func _build_result() -> void:
 	_add_text_card(title, description)
 	_add_hero_card()
 	_add_text_card("획득 골드", "+%d" % GameData.run_gold_reward)
+	_add_text_card("획득 경험치", "+%d" % GameData.run_experience_reward)
 	_add_action("다시 모험하기", func(): _go("stage_select"), true)
 	_add_action("메인 메뉴", func(): _go("main_menu"))
 
