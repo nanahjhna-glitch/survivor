@@ -613,6 +613,32 @@ func _build_hud() -> void:
 	notification_label.visible = false
 	root.add_child(notification_label)
 
+	var char_bar_row := HBoxContainer.new()
+	char_bar_row.anchor_left = 0.0
+	char_bar_row.anchor_top = 0.0
+	char_bar_row.offset_left = 18
+	char_bar_row.offset_top = 70
+	char_bar_row.add_theme_constant_override("separation", 8)
+	root.add_child(char_bar_row)
+	for c in [player] + companions:
+		var col := VBoxContainer.new()
+		col.add_theme_constant_override("separation", 2)
+		var hp := _make_bar(Color("#db6558"))
+		hp.custom_minimum_size = Vector2(120, 14)
+		var exp := _make_bar(Color("#55c6d1"))
+		exp.custom_minimum_size = Vector2(120, 8)
+		col.add_child(hp)
+		col.add_child(exp)
+		char_bar_row.add_child(col)
+		c.health_changed.connect(func(cur: float, maximum: float) -> void:
+			hp.max_value = maximum
+			hp.value = cur
+		)
+		c.experience_changed.connect(func(current: int, required: int) -> void:
+			exp.max_value = required
+			exp.value = current
+		)
+
 	joystick = JoystickScript.new()
 	joystick.position = Vector2(22, -178)
 	joystick.anchor_top = 1.0
