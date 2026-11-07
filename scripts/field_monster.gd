@@ -113,8 +113,6 @@ func _physics_process(delta: float) -> void:
 			attack_timer = 1.25
 			player.take_damage(float(monster_data["attack"]))
 	move_and_slide()
-	var diamond_distance := absf(global_position.x) + absf(global_position.z)
-	if diamond_distance > 25.0:
-		var boundary_scale := 25.0 / diamond_distance
-		global_position.x *= boundary_scale
-		global_position.z *= boundary_scale
+	if absf(global_position.x) > 12.5 or absf(global_position.z) > 12.5:
+		global_position.x = clampf(global_position.x, -12.5, 12.5)
+		global_position.z = clampf(global_position.z, -12.5, 12.5)
