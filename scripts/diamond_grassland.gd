@@ -245,9 +245,9 @@ func _build_field() -> void:
 	floor_body.name = "GrasslandGround"
 	floor_body.position.y = -0.3
 	var tile_size := 1.0
-	var half := 8
-	for x in range(-half, half):
-		for z in range(-half, half):
+	var half := 12
+	for x in range(-half, half + 1):
+		for z in range(-half, half + 1):
 			var tile := MeshInstance3D.new()
 			var box := BoxMesh.new()
 			box.size = Vector3(tile_size, 0.12, tile_size)
@@ -263,7 +263,7 @@ func _build_field() -> void:
 			add_child(tile)
 	var floor_collider := CollisionShape3D.new()
 	var box_shape := BoxShape3D.new()
-	box_shape.size = Vector3(16.0, 0.2, 16.0)
+	box_shape.size = Vector3(25.0, 0.2, 25.0)
 	floor_collider.shape = box_shape
 	floor_body.add_child(floor_collider)
 	add_child(floor_body)
@@ -297,7 +297,7 @@ func _create_diamond_ground_mesh() -> ArrayMesh:
 
 
 func _add_square_boundary() -> void:
-	var half := 8.0
+	var half := 12.5
 	var corners := [
 		Vector3(-half, 0, -half),
 		Vector3(half, 0, -half),
@@ -460,7 +460,7 @@ func _build_voxel_forest_decorations() -> void:
 	# 잔디/꽃 산포
 	for i in range(20):
 		var p := Vector3(random.randf_range(-20.0, 20.0), 0.0, random.randf_range(-20.0, 20.0))
-		if absf(p.x) >= 7.5 or absf(p.z) >= 7.5:
+		if absf(p.x) >= 12.5 or absf(p.z) >= 12.5:
 			continue
 		if Vector2(p.x, p.z).length() < 3.0:
 			continue
@@ -471,14 +471,14 @@ func _build_voxel_forest_decorations() -> void:
 	# 버섯 소수 배치
 	for i in range(3):
 		var p := Vector3(random.randf_range(-18.0, 18.0), 0.0, random.randf_range(-18.0, 18.0))
-		if absf(p.x) >= 7.5 or absf(p.z) >= 7.5:
+		if absf(p.x) >= 12.5 or absf(p.z) >= 12.5:
 			continue
 		_add_voxel_decoration(mushroom_path, p, Vector3.ONE * random.randf_range(0.9, 1.1), random.randf_range(0.0, TAU), false)
 
 	# 상자 소품
 	for i in range(2):
 		var p := Vector3(random.randf_range(-12.0, 12.0), 0.0, random.randf_range(-12.0, 12.0))
-		if absf(p.x) >= 7.5 or absf(p.z) >= 7.5:
+		if absf(p.x) >= 12.5 or absf(p.z) >= 12.5:
 			continue
 		var path: String = box_paths[random.randi_range(0, box_paths.size() - 1)]
 		_add_voxel_decoration(path, p, Vector3.ONE * 0.9, random.randf_range(0.0, TAU), true)
@@ -539,16 +539,20 @@ func _spawn_player() -> void:
 	camera.fov = 60.0
 	add_child(camera)
 
-	# AI 동료 캐릭터 출전
-	var companion_index := 1 if GameData.selected_character == 0 else 0
-	companion_character_index = companion_index
-	var companion: FieldPlayer = PlayerScript.new()
-	companion.name = "Companion"
-	companion.setup(self, GameData.CHARACTERS[companion_index])
-	companion.position = Vector3(2.0, 0.0, 0.0)
-	companion.auto_hunt_disabled = false
-	add_child(companion)
-	companions.append(companion)
+	# AI 동료 캐릭터 출전 (총 6명 파티)
+	for i in range(5):
+		var companion_index := i % GameData.CHARACTERS.size()
+		if companion_index == GameData.selected_character:
+			companion_index = (companion_index + 1) % GameData.CHARACTERS.size()
+		if i == 0:
+			companion_character_index = companion_index
+		var companion: FieldPlayer = PlayerScript.new()
+		companion.name = "Companion%d" % i
+		companion.setup(self, GameData.CHARACTERS[companion_index])
+		companion.position = Vector3(2.0 + float(i) * 1.5, 0.0, 0.0)
+		companion.auto_hunt_disabled = false
+		add_child(companion)
+		companions.append(companion)
 
 	_update_camera(1.0)
 
@@ -803,8 +807,8 @@ func _spawn_monster() -> void:
 	var angle := random.randf_range(0.0, TAU)
 	var distance := random.randf_range(3.0, 5.0)
 	enemy.position = player.position + Vector3(cos(angle) * distance, 0.0, sin(angle) * distance)
-	enemy.position.x = clampf(enemy.position.x, -7.5, 7.5)
-	enemy.position.z = clampf(enemy.position.z, -7.5, 7.5)
+	enemy.position.x = clampf(enemy.position.x, -12.5, 12.5)
+	enemy.position.z = clampf(enemy.position.z, -12.5, 12.5)
 	add_child(enemy)
 	alive_monsters.append(enemy)
 
@@ -1390,7 +1394,7 @@ func _build_field_decorations() -> void:
 		_add_fbx(fence_path, pos, Vector3.ONE, -angle + PI * 0.5, true)
 	for i in range(8):
 		var p := Vector3(random.randf_range(-20.0, 20.0), 0.0, random.randf_range(-20.0, 20.0))
-		if absf(p.x) >= 7.5 or absf(p.z) >= 7.5:
+		if absf(p.x) >= 12.5 or absf(p.z) >= 12.5:
 			continue
 		if Vector2(p.x, p.z).length() < 4.0:
 			continue
@@ -1398,7 +1402,7 @@ func _build_field_decorations() -> void:
 		_add_fbx(bed, p, Vector3.ONE, random.randf_range(0.0, TAU), false)
 	for i in range(6):
 		var p := Vector3(random.randf_range(-18.0, 18.0), 0.0, random.randf_range(-18.0, 18.0))
-		if absf(p.x) >= 7.5 or absf(p.z) >= 7.5:
+		if absf(p.x) >= 12.5 or absf(p.z) >= 12.5:
 			continue
 		_add_fbx(base + "misc_models/stone/bench01.fbx", p, Vector3.ONE, random.randf_range(0.0, TAU), true)
 	_add_fbx(base + "misc_models/stone/fountain01_round.fbx", Vector3(6, 0, 6), Vector3.ONE, 0.0, true)

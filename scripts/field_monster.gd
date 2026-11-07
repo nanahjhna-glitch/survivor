@@ -113,6 +113,6 @@ func _physics_process(delta: float) -> void:
 			attack_timer = 1.25
 			player.take_damage(float(monster_data["attack"]))
 	move_and_slide()
-	if absf(global_position.x) > 7.5 or absf(global_position.z) > 7.5:
-		global_position.x = clampf(global_position.x, -7.5, 7.5)
-		global_position.z = clampf(global_position.z, -7.5, 7.5)
+	if absf(global_position.x) > 12.5 or absf(global_position.z) > 12.5:
+		global_position.x = clampf(global_position.x, -12.5, 12.5)
+		global_position.z = clampf(global_position.z, -12.5, 12.5)
