@@ -625,14 +625,10 @@ func _physics_process(delta: float) -> void:
 		weapon.rotation.z = -sin((attack_animation_time / 0.28) * PI) * 1.15
 	move_and_slide()
 	_update_movement_animation(delta)
-	var diamond_distance := absf(global_position.x) + absf(global_position.z)
-	if diamond_distance > 25.0:
-		var boundary_scale := 25.0 / diamond_distance
-		global_position.x *= boundary_scale
-		global_position.z *= boundary_scale
-		var boundary_normal := (
-			Vector3(signf(global_position.x), 0.0, signf(global_position.z)).normalized()
-		)
+	if absf(global_position.x) > 7.5 or absf(global_position.z) > 7.5:
+		global_position.x = clampf(global_position.x, -7.5, 7.5)
+		global_position.z = clampf(global_position.z, -7.5, 7.5)
+		var boundary_normal := Vector3(signf(global_position.x), 0.0, signf(global_position.z)).normalized()
 		var outward_speed := velocity.dot(boundary_normal)
 		if outward_speed > 0.0:
 			velocity -= boundary_normal * outward_speed
