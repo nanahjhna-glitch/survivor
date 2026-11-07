@@ -130,6 +130,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if event.button_index == MOUSE_BUTTON_RIGHT or event.button_index == MOUSE_BUTTON_MIDDLE:
 			camera_dragging = event.pressed
+			if event.pressed:
+				focused_character = null
 			return
 	if event is InputEventMouseMotion and camera_dragging:
 		camera_yaw -= event.relative.x * 0.005
@@ -888,6 +890,7 @@ func _on_attack_pressed() -> void:
 
 func _toggle_auto_cast() -> void:
 	auto_cast_enabled = not auto_cast_enabled
+	focused_character = null
 	if auto_cast_button != null:
 		auto_cast_button.text = "자동: %s" % ("ON" if auto_cast_enabled else "OFF")
 
