@@ -293,9 +293,10 @@ func _build_growth() -> void:
 
 func _build_collection() -> void:
 	_add_text_card("모험 도감", "지금까지 만난 동료와 몬스터")
-	for character in GameData.CHARACTERS:
+	for i in range(GameData.CHARACTERS.size()):
+		var character: Dictionary = GameData.CHARACTERS[i]
 		_add_text_card(
-			"동료  ·  %s" % character["name"],
+			"동료  ·  %s  (Lv.%d)" % [character["name"], GameData.hero_levels.get(i, 1)],
 			"%s  |  %s" % [character["weapon"], character["passive"]]
 		)
 	for stage in GameData.STAGES:
