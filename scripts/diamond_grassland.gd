@@ -591,41 +591,7 @@ func _build_hud() -> void:
 	notification_label.visible = false
 	root.add_child(notification_label)
 
-	var char_bar_row := HBoxContainer.new()
-	char_bar_row.anchor_left = 0.0
-	char_bar_row.anchor_top = 0.0
-	char_bar_row.offset_left = 18
-	char_bar_row.offset_top = 70
-	char_bar_row.add_theme_constant_override("separation", 8)
-	root.add_child(char_bar_row)
-	var char_indices := [GameData.selected_character, companion_character_index]
-	var idx := 0
-	for c in [player] + companions:
-		var col := VBoxContainer.new()
-		col.add_theme_constant_override("separation", 2)
-		var name_label := _hud_label(str(GameData.CHARACTERS[char_indices[idx]]["name"]), 12)
-		col.add_child(name_label)
-		var level_label := _hud_label("Lv.1", 11)
-		col.add_child(level_label)
-		var hp := _make_bar(Color("#db6558"))
-		hp.custom_minimum_size = Vector2(120, 14)
-		var exp := _make_bar(Color("#55c6d1"))
-		exp.custom_minimum_size = Vector2(120, 8)
-		col.add_child(hp)
-		col.add_child(exp)
-		char_bar_row.add_child(col)
-		c.health_changed.connect(func(cur: float, maximum: float) -> void:
-			hp.max_value = maximum
-			hp.value = cur
-		)
-		c.experience_changed.connect(func(current: int, required: int) -> void:
-			exp.max_value = required
-			exp.value = current
-		)
-		c.level_changed.connect(func(new_level: int, _u: int) -> void:
-			level_label.text = "Lv.%d" % new_level
-		)
-		idx += 1
+	# 상단 캐릭터 바 제거
 
 	# 하단 4등분 캐릭터 패널
 	var bottom_panel := HBoxContainer.new()
@@ -642,8 +608,15 @@ func _build_hud() -> void:
 	for c in [player] + companions:
 		var panel := VBoxContainer.new()
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var name_row := HBoxContainer.new()
 		var name_lbl := _hud_label(str(GameData.CHARACTERS[bottom_indices[bidx]]["name"]), 12)
-		panel.add_child(name_lbl)
+		var level_lbl := _hud_label("Lv.1", 11)
+		name_row.add_child(name_lbl)
+		name_row.add_child(level_lbl)
+		panel.add_child(name_row)
+		var spacer := Control.new()
+		spacer.custom_minimum_size = Vector2(0, 6)
+		panel.add_child(spacer)
 		var hp := _make_bar(Color("#db6558"))
 		hp.custom_minimum_size = Vector2(0, 12)
 		hp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -652,6 +625,9 @@ func _build_hud() -> void:
 		exp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		panel.add_child(hp)
 		panel.add_child(exp)
+		c.level_changed.connect(func(new_level: int, _u: int) -> void:
+			level_lbl.text = "Lv.%d" % new_level
+		)
 		bottom_panel.add_child(panel)
 		c.health_changed.connect(func(cur: float, maximum: float) -> void:
 			hp.max_value = maximum
@@ -676,13 +652,7 @@ func _build_hud() -> void:
 	joystick.direction_changed.connect(_on_joystick_changed)
 	root.add_child(joystick)
 
-	run_button = _make_hud_button("달리기", Vector2(82, 54))
-	run_button.position = Vector2(114, -238)
-	run_button.anchor_top = 1.0
-	run_button.anchor_bottom = 1.0
-	run_button.button_down.connect(_set_running.bind(true))
-	run_button.button_up.connect(_set_running.bind(false))
-	root.add_child(run_button)
+	# 달리기 버튼 제거
 
 	var combat_controls := VBoxContainer.new()
 	combat_controls.visible = false
