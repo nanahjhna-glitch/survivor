@@ -184,6 +184,18 @@ func _build_stage_select() -> void:
 		column.add_child(_label("%s   |   권장 레벨 %d" % [stage["subtitle"], stage["level"]], 15, INK))
 		column.add_child(_label("몬스터  %s" % stage["monsters"], 15, MUTED))
 		column.add_child(_label("보상  %s" % stage["reward"], 15, GOLD_DARK))
+	var party_row := HBoxContainer.new()
+	party_row.add_theme_constant_override("separation", 8)
+	page_body.add_child(party_row)
+	var slot_indices := [GameData.selected_character, 1, 0, 1]
+	for i in range(4):
+		var slot := _panel()
+		slot.custom_minimum_size = Vector2(0, 64)
+		var col := _column_in(slot)
+		var idx := slot_indices[i] if slot_indices[i] < GameData.CHARACTERS.size() else 0
+		col.add_child(_label("슬롯 %d" % (i + 1), 12, MUTED))
+		col.add_child(_label(GameData.CHARACTERS[idx]["name"], 15, INK))
+		party_row.add_child(slot)
 	_add_action("전투 시작", _start_battle, true)
 
 
