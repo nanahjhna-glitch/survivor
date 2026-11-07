@@ -58,7 +58,7 @@ var run_button_held := false
 var paused := false
 var camera_yaw := 0.785
 var camera_pitch := -0.6
-var camera_distance := 12.0
+var camera_distance := 40.0
 var camera_dragging := false
 var random := RandomNumberGenerator.new()
 var alive_monsters: Array[FieldMonster] = []
@@ -898,17 +898,10 @@ func _toggle_auto_cast() -> void:
 
 var map_view_toggled := false
 func _toggle_map_view() -> void:
-	map_view_toggled = not map_view_toggled
-	if map_view_toggled:
-		camera_target = null
-		camera_distance = 40.0
-		camera_pitch = -0.6
-		camera_yaw = 0.785
-	else:
-		camera_target = null
-		camera_yaw = 0.785
-		camera_pitch = -0.6
-		camera_distance = 12.0
+	camera_target = null
+	camera_distance = 40.0
+	camera_pitch = -0.6
+	camera_yaw = 0.785
 
 
 func _on_skill_pressed(index: int) -> void:
@@ -1317,7 +1310,7 @@ func _update_camera(delta: float = 1.0 / 60.0) -> void:
 	if player == null or camera == null:
 		return
 	var target_origin: Vector3
-	if map_view_toggled:
+	if camera_target == null and camera_distance >= 39.0:
 		target_origin = Vector3.ZERO
 	elif camera_target != null and is_instance_valid(camera_target) and not camera_target.dead:
 		target_origin = camera_target.get_global_transform_interpolated().origin
