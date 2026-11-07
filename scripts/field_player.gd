@@ -22,6 +22,7 @@ const ANIMATION_SPEED_SMOOTHING := 12.0
 
 var arena: Node3D
 var character_index := 0
+var party_slot := 0
 var formation_slot := 0
 var level := 1
 var experience := 0

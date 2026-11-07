@@ -186,6 +186,7 @@ var gems := 25
 var selected_character := 0
 var selected_detail_character := 0
 var party_characters: Array[int] = [0, 1, 2, 3, 0, 1]
+var camera_target_slot := 0
 var selected_party_slot := 0
 var selected_stage := 0
 var permanent_stats: Dictionary = {

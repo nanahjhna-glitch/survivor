@@ -23,6 +23,7 @@ enum AutoHuntState { SEARCH, APPROACH, CASTING, RECOVERY, SUSPENDED }
 
 var player: FieldPlayer
 var companions: Array[FieldPlayer] = []
+var party_hud_panels: Array[PanelContainer] = []
 var companion_character_index := 0
 var top_time_label: Label
 var top_kills_label: Label
@@ -559,6 +560,7 @@ func _spawn_player() -> void:
 	player.name = "Player"
 	player.setup(self, GameData.CHARACTERS[GameData.selected_character])
 	player.formation_slot = 0
+	player.party_slot = 0
 	# 기존 코드
 	# player.position = Vector3.ZERO
 	# 변경 코드 (Y축을 1.0만큼 공중으로 띄움)
@@ -589,6 +591,7 @@ func _spawn_player() -> void:
 		companion.setup(self, GameData.CHARACTERS[companion_index])
 		companion.character_index = companion_index
 		companion.formation_slot = i + 1
+		companion.party_slot = i + 1
 		var a: float = companion_angles[i]
 		companion.position = Vector3(cos(a) * 8.0, 0.0, sin(a) * 8.0)
 		companion.auto_hunt_disabled = false
@@ -597,6 +600,8 @@ func _spawn_player() -> void:
 		add_child(companion)
 		companions.append(companion)
 
+	var saved_target := _party_member_at_slot(GameData.camera_target_slot)
+	camera_target = saved_target if is_instance_valid(saved_target) and not saved_target.dead else player
 	_update_camera(1.0)
 
 
@@ -667,6 +672,7 @@ func _build_hud() -> void:
 	bottom_panel.add_theme_constant_override("h_separation", 8)
 	bottom_panel.add_theme_constant_override("v_separation", 8)
 	root.add_child(bottom_panel)
+	party_hud_panels.clear()
 	var bidx := 0
 	for c in [player] + companions:
 		var panel := PanelContainer.new()
@@ -674,16 +680,24 @@ func _build_hud() -> void:
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		panel.mouse_filter = Control.MOUSE_FILTER_STOP
 		panel.gui_input.connect(func(event: InputEvent) -> void:
-			if event is InputEventMouseButton and event.pressed:
-				camera_target = c
+			if (
+				(event is InputEventMouseButton and event.pressed)
+				or (event is InputEventScreenTouch and event.pressed)
+			):
+				_select_camera_target(c)
 		)
 		var style := StyleBoxFlat.new()
 		style.bg_color = Color(0.06, 0.09, 0.12, 0.78)
-		style.border_color = Color("#d8c99e")
+		style.border_color = (
+			Color("#f0c65b")
+			if c.party_slot == GameData.camera_target_slot
+			else Color("#d8c99e")
+		)
 		style.set_border_width_all(1)
 		style.set_corner_radius_all(8)
 		style.set_content_margin_all(8)
 		panel.add_theme_stylebox_override("panel", style)
+		party_hud_panels.append(panel)
 		var content := VBoxContainer.new()
 		content.add_theme_constant_override("separation", 4)
 		panel.add_child(content)
@@ -938,7 +952,6 @@ func _on_attack_pressed() -> void:
 
 func _toggle_auto_cast() -> void:
 	auto_cast_enabled = not auto_cast_enabled
-	camera_target = null
 	if auto_cast_button != null:
 		auto_cast_button.text = "자동: %s" % ("ON" if auto_cast_enabled else "OFF")
 
@@ -1443,12 +1456,8 @@ func _on_party_member_died(member: FieldPlayer) -> void:
 			break
 	if any_alive:
 		_show_notification("파티원이 쓰러졌습니다.", 1.5)
-		# 카메라 추적 대상이 사망했으면 생존자로 전환
-		if camera_target == member or camera_target == null:
-			for m in [player] + companions:
-				if is_instance_valid(m) and not m.dead:
-					camera_target = m
-					break
+		if camera_target == member or GameData.camera_target_slot == member.party_slot:
+			_select_next_camera_target(member.party_slot)
 		return
 	# 전원 사망 → 패배
 	GameData.run_won = false
@@ -1458,6 +1467,50 @@ func _on_party_member_died(member: FieldPlayer) -> void:
 	paused = true
 	get_tree().paused = true
 	_show_end_panel("모험 종료", "획득 골드  %d" % GameData.run_gold_reward)
+
+
+func _party_member_at_slot(slot: int) -> FieldPlayer:
+	if slot == 0:
+		return player
+	var companion_index := slot - 1
+	if companion_index >= 0 and companion_index < companions.size():
+		return companions[companion_index]
+	return null
+
+
+func _select_camera_target(member: FieldPlayer) -> void:
+	if not is_instance_valid(member) or member.dead:
+		return
+	camera_target = member
+	GameData.camera_target_slot = member.party_slot
+	for index in range(party_hud_panels.size()):
+		var panel := party_hud_panels[index]
+		if not is_instance_valid(panel):
+			continue
+		var style := panel.get_theme_stylebox("panel").duplicate() as StyleBoxFlat
+		if style == null:
+			continue
+		style.border_color = (
+			Color("#f0c65b") if index == member.party_slot else Color("#d8c99e")
+		)
+		panel.add_theme_stylebox_override("panel", style)
+
+
+func _select_next_camera_target(dead_slot: int) -> void:
+	var members: Array = [player] + companions
+	if members.is_empty():
+		camera_target = null
+		return
+	for step in range(1, members.size() + 1):
+		var slot := (dead_slot + step) % members.size()
+		var candidate: Variant = members[slot]
+		if not is_instance_valid(candidate):
+			continue
+		var survivor := candidate as FieldPlayer
+		if survivor != null and not survivor.dead:
+			_select_camera_target(survivor)
+			return
+	camera_target = null
 
 
 func _show_notification(message: String, duration := 2.0) -> void:
@@ -1507,6 +1560,10 @@ func _update_skill_button(index: int) -> void:
 func _update_camera(delta: float = 1.0 / 60.0) -> void:
 	if player == null or camera == null:
 		return
+	if camera_target != null and not is_instance_valid(camera_target):
+		_select_next_camera_target(GameData.camera_target_slot)
+	elif camera_target != null and camera_target.dead:
+		_select_next_camera_target(camera_target.party_slot)
 	var target_origin: Vector3
 	if camera_target == null and camera_distance >= 39.0:
 		target_origin = Vector3.ZERO
