@@ -1479,6 +1479,7 @@ func _select_camera_target(member: FieldPlayer) -> void:
 		return
 	camera_target = member
 	GameData.camera_target_slot = member.party_slot
+	GameData.save_game()
 	for index in range(party_hud_panels.size()):
 		var panel := party_hud_panels[index]
 		if not is_instance_valid(panel):

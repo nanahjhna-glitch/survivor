@@ -212,6 +212,7 @@ var hero_levels: Dictionary = {}
 var hero_experience: Dictionary = {}
 var party_slot_levels: Array[int] = [1, 1, 1, 1, 1, 1]
 var party_slot_experience: Array[int] = [0, 0, 0, 0, 0, 0]
+var party_slot_progress_loaded := false
 
 
 func _ready() -> void:
@@ -221,7 +222,8 @@ func _ready() -> void:
 			hero_levels[i] = 1
 		if not hero_experience.has(i):
 			hero_experience[i] = 0
-	_initialize_party_slot_progress()
+	if not party_slot_progress_loaded:
+		_initialize_party_slot_progress()
 
 
 func load_game() -> void:
@@ -241,6 +243,9 @@ func load_game() -> void:
 			party_characters[i] = clampi(int(saved_party[i]), 0, CHARACTERS.size() - 1)
 	if not party_characters.is_empty():
 		party_characters[0] = selected_character
+	camera_target_slot = clampi(
+		int(config.get_value("profile", "camera_target_slot", 0)), 0, PARTY_SIZE - 1
+	)
 	selected_stage = clampi(int(config.get_value("profile", "stage", 0)), 0, STAGES.size() - 1)
 	var saved_stats: Variant = config.get_value(
 		"growth", "permanent_stats", config.get_value("growth", "upgrades", {})
@@ -259,6 +264,24 @@ func load_game() -> void:
 	for i in range(CHARACTERS.size()):
 		hero_levels[i] = maxi(1, int(config.get_value("hero", "level_%d" % i, 1)))
 		hero_experience[i] = maxi(0, int(config.get_value("hero", "exp_%d" % i, 0)))
+	_initialize_party_slot_progress()
+	for slot in range(PARTY_SIZE):
+		var level_key := "level_%d" % slot
+		var experience_key := "exp_%d" % slot
+		if config.has_section_key("party_progress", level_key):
+			party_slot_levels[slot] = maxi(
+				1, int(config.get_value("party_progress", level_key, party_slot_levels[slot]))
+			)
+		if config.has_section_key("party_progress", experience_key):
+			party_slot_experience[slot] = maxi(
+				0,
+				int(
+					config.get_value(
+						"party_progress", experience_key, party_slot_experience[slot]
+					)
+				)
+			)
+	party_slot_progress_loaded = true
 
 
 func save_game() -> void:
@@ -268,11 +291,15 @@ func save_game() -> void:
 	config.set_value("profile", "gems", gems)
 	config.set_value("profile", "character", selected_character)
 	config.set_value("profile", "party", party_characters)
+	config.set_value("profile", "camera_target_slot", camera_target_slot)
 	config.set_value("profile", "stage", selected_stage)
 	config.set_value("growth", "permanent_stats", permanent_stats)
 	for i in range(CHARACTERS.size()):
 		config.set_value("hero", "level_%d" % i, int(hero_levels.get(i, 1)))
 		config.set_value("hero", "exp_%d" % i, int(hero_experience.get(i, 0)))
+	for slot in range(PARTY_SIZE):
+		config.set_value("party_progress", "level_%d" % slot, party_slot_levels[slot])
+		config.set_value("party_progress", "exp_%d" % slot, party_slot_experience[slot])
 	config.set_value("settings", "sound", sound_enabled)
 	config.set_value("settings", "vibration", vibration_enabled)
 	var error := config.save(SAVE_PATH)
