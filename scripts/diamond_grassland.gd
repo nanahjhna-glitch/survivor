@@ -162,6 +162,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_on_skill_pressed(3)
 
 func _update_keyboard_movement() -> void:
+	# 키보드 이동 비활성화 (소스 유지)
+	return
 	if player == null or player.dead or paused:
 		return
 
@@ -625,8 +627,50 @@ func _build_hud() -> void:
 		)
 		idx += 1
 
+	# 하단 4등분 캐릭터 패널
+	var bottom_panel := HBoxContainer.new()
+	bottom_panel.anchor_left = 0.0
+	bottom_panel.anchor_right = 1.0
+	bottom_panel.anchor_top = 1.0
+	bottom_panel.anchor_bottom = 1.0
+	bottom_panel.offset_top = -90
+	bottom_panel.offset_bottom = -10
+	bottom_panel.add_theme_constant_override("separation", 8)
+	root.add_child(bottom_panel)
+	var char_indices := [GameData.selected_character, companion_character_index]
+	var idx := 0
+	for c in [player] + companions:
+		var panel := VBoxContainer.new()
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var name_lbl := _hud_label(str(GameData.CHARACTERS[char_indices[idx]]["name"]), 12)
+		panel.add_child(name_lbl)
+		var hp := _make_bar(Color("#db6558"))
+		hp.custom_minimum_size = Vector2(0, 12)
+		hp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var exp := _make_bar(Color("#55c6d1"))
+		exp.custom_minimum_size = Vector2(0, 8)
+		exp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		panel.add_child(hp)
+		panel.add_child(exp)
+		bottom_panel.add_child(panel)
+		c.health_changed.connect(func(cur: float, maximum: float) -> void:
+			hp.max_value = maximum
+			hp.value = cur
+		)
+		c.experience_changed.connect(func(current: int, required: int) -> void:
+			exp.max_value = required
+			exp.value = current
+		)
+		idx += 1
+	# 4칸 채우기 (빈 패널)
+	for i in range(4 - ([player] + companions).size()):
+		var spacer := Control.new()
+		spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bottom_panel.add_child(spacer)
+
 	joystick = JoystickScript.new()
 	joystick.position = Vector2(22, -178)
+	joystick.visible = false
 	joystick.anchor_top = 1.0
 	joystick.anchor_bottom = 1.0
 	joystick.direction_changed.connect(_on_joystick_changed)
@@ -641,6 +685,7 @@ func _build_hud() -> void:
 	root.add_child(run_button)
 
 	var combat_controls := VBoxContainer.new()
+	combat_controls.visible = false
 	combat_controls.anchor_left = 1.0
 	combat_controls.anchor_top = 0.5
 	combat_controls.anchor_right = 1.0
@@ -693,16 +738,8 @@ func _build_hud() -> void:
 	pause_button.offset_bottom = 46
 	pause_button.pressed.connect(_toggle_pause)
 	root.add_child(pause_button)
-	minimap = MinimapScript.new()
-	minimap.setup(self, player, FIELD_RADIUS)
-	minimap.anchor_left = 1.0
-	minimap.anchor_right = 1.0
-	minimap.offset_left = -158
-	minimap.offset_top = 52
-	minimap.offset_right = -12
-	minimap.offset_bottom = 198
-	minimap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(minimap)
+	# minimap 비활성화 (소스 유지)
+	# minimap = MinimapScript.new() ...
 	_on_health_changed(player.health, player.max_health)
 	_on_experience_changed(player.experience, player.next_level_experience)
 	_update_hud()
