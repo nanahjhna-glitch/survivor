@@ -1285,17 +1285,8 @@ func monster_defeated(at: Vector3, data: Dictionary, defeated_monster: FieldMons
 		if not is_instance_valid(member) or member.dead:
 			continue
 		member.gain_experience(exp_amount)
-		var idx := member.character_index
-		GameData.hero_experience[idx] = int(GameData.hero_experience.get(idx, 0)) + exp_amount
-		var cur_level := int(GameData.hero_levels.get(idx, 1))
-		var cur_exp := int(GameData.hero_experience.get(idx, 0))
-		var need := 100 + cur_level * 50
-		while cur_exp >= need:
-			cur_exp -= need
-			cur_level += 1
-			need = 100 + cur_level * 50
-		GameData.hero_levels[idx] = cur_level
-		GameData.hero_experience[idx] = cur_exp
+		GameData.add_party_slot_experience(member.party_slot, member.character_index, exp_amount)
+	_queue_progress_save()
 	if random.randf() < float(CombatData.DROP_RULES["gold_chance"]):
 		GameData.add_gold(int(data["gold"]), false)
 		_queue_progress_save()

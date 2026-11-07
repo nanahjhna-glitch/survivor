@@ -215,7 +215,7 @@ func _build_stage_select() -> void:
 			"슬롯 %d  ·  %s  ·  Lv.%d" % [
 				i + 1,
 				GameData.CHARACTERS[idx]["name"],
-				GameData.hero_levels.get(idx, 1)
+				GameData.party_slot_levels[i]
 			],
 			idx == GameData.selected_character,
 			52
@@ -289,15 +289,16 @@ func _build_result() -> void:
 		]
 	)
 	_add_text_card("파티 성장", "이번 전투에 참여한 영웅의 레벨 변화")
-	var displayed_heroes: Dictionary = {}
-	for index in GameData.party_characters:
-		if displayed_heroes.has(index):
-			continue
-		displayed_heroes[index] = true
-		var before := int(GameData.run_start_hero_levels.get(index, GameData.hero_levels.get(index, 1)))
-		var after := int(GameData.hero_levels.get(index, 1))
+	for slot in range(GameData.party_characters.size()):
+		var index := GameData.party_characters[slot]
+		var before := (
+			GameData.run_start_party_slot_levels[slot]
+			if slot < GameData.run_start_party_slot_levels.size()
+			else GameData.party_slot_levels[slot]
+		)
+		var after := GameData.party_slot_levels[slot]
 		_add_text_card(
-			str(GameData.CHARACTERS[index]["name"]),
+			"슬롯 %d · %s" % [slot + 1, GameData.CHARACTERS[index]["name"]],
 			"Lv.%d → Lv.%d" % [before, after]
 		)
 	_add_action("다시 모험하기", func(): _go("stage_select"), true)
@@ -811,7 +812,7 @@ func _set_hero_detail_tab(tab_name: String) -> void:
 
 
 func _select_character(index: int) -> void:
-	GameData.party_characters[GameData.selected_party_slot] = index
+	GameData.set_party_slot_character(GameData.selected_party_slot, index)
 	if GameData.selected_party_slot == 0:
 		GameData.selected_character = index
 	GameData.save_game()

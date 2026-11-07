@@ -204,11 +204,14 @@ var run_experience_reward := 0
 var run_elapsed_time := 0.0
 var run_kill_count := 0
 var run_start_hero_levels: Dictionary = {}
+var run_start_party_slot_levels: Array[int] = []
 var run_won := true
 var run_level := 1
 var run_upgrades: Dictionary = {"power": 0, "vitality": 0, "fortune": 0}
 var hero_levels: Dictionary = {}
 var hero_experience: Dictionary = {}
+var party_slot_levels: Array[int] = [1, 1, 1, 1, 1, 1]
+var party_slot_experience: Array[int] = [0, 0, 0, 0, 0, 0]
 
 
 func _ready() -> void:
@@ -218,6 +221,7 @@ func _ready() -> void:
 			hero_levels[i] = 1
 		if not hero_experience.has(i):
 			hero_experience[i] = 0
+	_initialize_party_slot_progress()
 
 
 func load_game() -> void:
@@ -290,12 +294,64 @@ func add_gold(amount: int, save_immediately := true) -> void:
 		save_game()
 
 
+func add_party_slot_experience(slot: int, character_index: int, amount: int) -> void:
+	if (
+		slot < 0
+		or slot >= party_slot_levels.size()
+		or character_index < 0
+		or character_index >= CHARACTERS.size()
+		or amount <= 0
+	):
+		return
+	var current_level := party_slot_levels[slot]
+	var current_experience := party_slot_experience[slot] + amount
+	var required_experience := 100 + current_level * 50
+	while current_experience >= required_experience:
+		current_experience -= required_experience
+		current_level += 1
+		required_experience = 100 + current_level * 50
+	party_slot_levels[slot] = current_level
+	party_slot_experience[slot] = current_experience
+
+	var recorded_level := int(hero_levels.get(character_index, 1))
+	if current_level > recorded_level:
+		hero_levels[character_index] = current_level
+		hero_experience[character_index] = current_experience
+	elif current_level == recorded_level:
+		hero_experience[character_index] = maxi(
+			int(hero_experience.get(character_index, 0)), current_experience
+		)
+
+
+func _initialize_party_slot_progress() -> void:
+	for slot in range(PARTY_SIZE):
+		var character_index := party_characters[slot]
+		party_slot_levels[slot] = int(hero_levels.get(character_index, 1))
+		party_slot_experience[slot] = int(hero_experience.get(character_index, 0))
+
+
+func set_party_slot_character(slot: int, character_index: int) -> void:
+	if (
+		slot < 0
+		or slot >= party_characters.size()
+		or character_index < 0
+		or character_index >= CHARACTERS.size()
+	):
+		return
+	if party_characters[slot] == character_index:
+		return
+	party_characters[slot] = character_index
+	party_slot_levels[slot] = int(hero_levels.get(character_index, 1))
+	party_slot_experience[slot] = int(hero_experience.get(character_index, 0))
+
+
 func begin_run() -> void:
 	run_gold_reward = 0
 	run_experience_reward = 0
 	run_elapsed_time = 0.0
 	run_kill_count = 0
 	run_start_hero_levels = hero_levels.duplicate()
+	run_start_party_slot_levels = party_slot_levels.duplicate()
 	run_won = true
 	player_level = 1
 	run_level = 1
