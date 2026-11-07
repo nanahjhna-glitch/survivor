@@ -22,6 +22,9 @@ enum AutoHuntState { SEARCH, APPROACH, CASTING, RECOVERY, SUSPENDED }
 var player: FieldPlayer
 var companions: Array[FieldPlayer] = []
 var companion_character_index := 0
+var top_time_label: Label
+var top_kills_label: Label
+var total_kills := 0
 var camera: Camera3D
 var joystick: GrasslandJoystick
 var hud_layer: CanvasLayer
@@ -644,6 +647,25 @@ func _build_hud() -> void:
 		spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		bottom_panel.add_child(spacer)
 
+	# 상단 전투 HUD
+	var top_bar := HBoxContainer.new()
+	top_bar.anchor_left = 0.0
+	top_bar.anchor_right = 1.0
+	top_bar.anchor_top = 0.0
+	top_bar.offset_top = 8
+	top_bar.offset_bottom = 32
+	top_bar.add_theme_constant_override("separation", 12)
+	root.add_child(top_bar)
+	var stage_lbl := _hud_label("ST %d" % (GameData.selected_stage + 1), 14)
+	top_bar.add_child(stage_lbl)
+	top_time_label = _hud_label("00:00", 14)
+	top_bar.add_child(top_time_label)
+	top_kills_label = _hud_label("처치 0", 14)
+	top_bar.add_child(top_kills_label)
+	var pause_btn := _make_hud_button("Ⅱ", Vector2(40, 28))
+	pause_btn.pressed.connect(_toggle_pause)
+	top_bar.add_child(pause_btn)
+
 	joystick = JoystickScript.new()
 	joystick.position = Vector2(22, -178)
 	joystick.visible = false
@@ -1049,6 +1071,7 @@ func _show_hitbox(mesh: Mesh, at: Vector3, yaw: float, color: Color) -> void:
 
 
 func monster_defeated(at: Vector3, data: Dictionary) -> void:
+	total_kills += 1
 	var living_monsters: Array[FieldMonster] = []
 	for enemy in alive_monsters:
 		if is_instance_valid(enemy) and not enemy.dead:
@@ -1224,6 +1247,10 @@ func _update_hud() -> void:
 	level_label.text = "Lv. %d" % player.get("level")
 	time_label.text = "%02d:%02d" % [int(elapsed_time / 60.0), int(elapsed_time) % 60]
 	gold_label.text = "골드 %d" % GameData.gold
+	if top_time_label != null:
+		top_time_label.text = "%02d:%02d" % [int(elapsed_time / 60.0), int(elapsed_time) % 60]
+	if top_kills_label != null:
+		top_kills_label.text = "처치 %d" % total_kills
 	for index in range(skill_buttons.size()):
 		_update_skill_button(index)
 
