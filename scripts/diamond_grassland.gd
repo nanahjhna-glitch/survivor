@@ -902,10 +902,13 @@ func _toggle_map_view() -> void:
 	if map_view_toggled:
 		camera_target = null
 		camera_distance = 34.0
-		camera_pitch = -0.8
+		camera_pitch = -1.4
 		camera_yaw = 0.0
 	else:
 		camera_target = null
+		camera_yaw = 0.785
+		camera_pitch = -0.6
+		camera_distance = 12.0
 
 
 func _on_skill_pressed(index: int) -> void:
