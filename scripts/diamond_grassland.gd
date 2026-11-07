@@ -74,6 +74,7 @@ var pause_root: Control
 var pause_detail_label: Label
 var level_up_overlay: LevelUpCardOverlay
 var pending_level_ups: Array[Dictionary] = []
+var leveling_member: FieldPlayer = null
 
 
 func _ready() -> void:
@@ -566,7 +567,7 @@ func _spawn_player() -> void:
 	player.character_index = GameData.selected_character
 	player.health_changed.connect(_on_health_changed)
 	player.experience_changed.connect(_on_experience_changed)
-	player.level_changed.connect(_on_level_changed)
+	player.level_changed.connect(_on_level_changed.bind(player))
 	player.player_died.connect(_on_party_member_died.bind(player))
 	add_child(player)
 	GameData.run_level = player.get("level")
@@ -592,6 +593,7 @@ func _spawn_player() -> void:
 		companion.position = Vector3(cos(a) * 8.0, 0.0, sin(a) * 8.0)
 		companion.auto_hunt_disabled = false
 		companion.player_died.connect(_on_party_member_died.bind(companion))
+		companion.level_changed.connect(_on_level_changed.bind(companion))
 		add_child(companion)
 		companions.append(companion)
 
@@ -1387,11 +1389,13 @@ func _on_experience_changed(current: int, required: int) -> void:
 		exp_label.text = "EXP %d / %d" % [current, required]
 
 
-func _on_level_changed(new_level: int, unlocked_skill: int) -> void:
+func _on_level_changed(new_level: int, unlocked_skill: int, member: FieldPlayer = null) -> void:
+	if member == null:
+		member = player
 	GameData.run_level = new_level
 	GameData.save_game()
 	GameAudio.play_sfx("level_up")
-	pending_level_ups.append({"level": new_level, "unlocked_skill": unlocked_skill})
+	pending_level_ups.append({"level": new_level, "unlocked_skill": unlocked_skill, "member": member})
 	paused = true
 	get_tree().paused = true
 	if pending_level_ups.size() == 1:
@@ -1405,6 +1409,7 @@ func _show_next_level_up_cards() -> void:
 	if level_up_overlay != null:
 		level_up_overlay.queue_free()
 	var level_info: Dictionary = pending_level_ups.front()
+	leveling_member = level_info.get("member", player)
 	var cards := CombatData.LEVEL_UP_CARDS.duplicate()
 	cards.shuffle()
 	cards = cards.slice(0, 3)
@@ -1418,7 +1423,8 @@ func _choose_level_up_card(card_id: String) -> void:
 	if pending_level_ups.is_empty():
 		return
 	GameAudio.play_sfx("card_pick")
-	player.apply_level_up_card(card_id)
+	if leveling_member != null and is_instance_valid(leveling_member):
+		leveling_member.apply_level_up_card(card_id)
 	_update_hud()
 	var level_info: Dictionary = pending_level_ups.pop_front()
 	var unlocked_skill := int(level_info["unlocked_skill"])
