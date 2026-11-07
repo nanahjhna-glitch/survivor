@@ -8,18 +8,19 @@ const MinimapScript = preload("res://scripts/diamond_grassland_minimap.gd")
 const LevelUpCardsScript = preload("res://scripts/level_up_cards.gd")
 
 const MAX_MONSTERS := 12
-const FIELD_RADIUS := 26.0
+const FIELD_RADIUS := 6.0
 const SKILL_BUTTON_SIZE := Vector2(70, 70)
 const AUTO_ATTACK_SCAN_INTERVAL := 0.1
 const AUTO_SEARCH_RADIUS := 14.0
 const AUTO_GLOBAL_COOLDOWN := 0.25
 const AUTO_SKILL_PRIORITY: Array[int] = [3, 1, 2, 0]
-const CAMERA_OFFSET := Vector3(0.0, 7.2, 5.6)
-const CAMERA_LOOK_HEIGHT := 1.15
+const CAMERA_OFFSET := Vector3(0.0, 16.0, 12.0)
+const CAMERA_LOOK_HEIGHT := 0.5
 
 enum AutoHuntState { SEARCH, APPROACH, CASTING, RECOVERY, SUSPENDED }
 
 var player: FieldPlayer
+var companions: Array[FieldPlayer] = []
 var camera: Camera3D
 var joystick: GrasslandJoystick
 var hud_layer: CanvasLayer
@@ -34,7 +35,7 @@ var notification_label: Label
 var run_button: Button
 var attack_button: Button
 var skill_buttons: Array[Button] = []
-var skill_cooldowns: Array[float] = [0.0, 0.0, 0.0, 0.0]
+# skill_cooldowns moved to FieldPlayer
 var casting_skill_index := -1
 var skill_cast_remaining := 0.0
 var elapsed_time := 0.0
@@ -50,6 +51,10 @@ var auto_hunt_move_direction := Vector3.ZERO
 var running := false
 var run_button_held := false
 var paused := false
+var camera_yaw := 0.0
+var camera_pitch := -0.4
+var camera_distance := 16.0
+var camera_dragging := false
 var random := RandomNumberGenerator.new()
 var alive_monsters: Array[FieldMonster] = []
 var notification_timer := 0.0
@@ -76,20 +81,29 @@ func _process(delta: float) -> void:
 	spawn_clock += delta
 	notification_timer = maxf(0.0, notification_timer - delta)
 	notification_label.visible = notification_timer > 0.0
-	for index in range(skill_cooldowns.size()):
-		skill_cooldowns[index] = maxf(0.0, skill_cooldowns[index] - delta)
+	for index in range(player.skill_cooldowns.size()):
+		player.skill_cooldowns[index] = maxf(0.0, player.skill_cooldowns[index] - delta)
 		_update_skill_button(index)
-	if casting_skill_index >= 0:
-		skill_cast_remaining = maxf(0.0, skill_cast_remaining - delta)
-		if skill_cast_remaining == 0.0:
-			_execute_skill(casting_skill_index)
-			casting_skill_index = -1
+	if player.casting_skill_index >= 0:
+		player.skill_cast_remaining = maxf(0.0, player.skill_cast_remaining - delta)
+		if player.skill_cast_remaining == 0.0:
+			_execute_skill(player.casting_skill_index)
+			player.casting_skill_index = -1
 	if auto_cast_enabled:
 		_auto_cast_combat(delta)
 	else:
 		auto_hunt_state = AutoHuntState.SEARCH
 		auto_hunt_target = null
 		auto_hunt_move_direction = Vector3.ZERO
+	if player.auto_hunt_controller != null and not player.dead:
+		player.auto_hunt_disabled = false
+		player.auto_hunt_controller.update(delta)
+	for companion in companions:
+		if is_instance_valid(companion) and not companion.dead:
+			_companion_auto_attack(companion)
+	for companion in companions:
+		if is_instance_valid(companion) and not companion.dead and companion.auto_hunt_controller != null:
+			companion.auto_hunt_controller.update(delta)
 	if spawn_clock >= 2.8 and alive_monsters.size() < MAX_MONSTERS:
 		spawn_clock = 0.0
 		_spawn_monster()
@@ -102,6 +116,27 @@ func _physics_process(_delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
+			camera_distance = maxf(8.0, camera_distance - 1.5)
+			return
+		if event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
+			camera_distance = minf(40.0, camera_distance + 1.5)
+			return
+		if event.button_index == MOUSE_BUTTON_RIGHT or event.button_index == MOUSE_BUTTON_MIDDLE:
+			camera_dragging = event.pressed
+			return
+	if event is InputEventMouseMotion and camera_dragging:
+		camera_yaw -= event.relative.x * 0.005
+		camera_pitch = clampf(camera_pitch - event.relative.y * 0.005, -0.9, -0.1)
+		return
+	if event is InputEventScreenDrag:
+		camera_yaw -= event.relative.x * 0.005
+		camera_pitch = clampf(camera_pitch - event.relative.y * 0.005, -0.9, -0.1)
+		return
+	if event is InputEventMagnifyGesture:
+		camera_distance = clampf(camera_distance / event.factor, 8.0, 40.0)
+		return
 	if event.is_action_pressed("ui_cancel"):
 		_toggle_pause()
 	if (
@@ -203,30 +238,32 @@ func _build_field() -> void:
 	var floor_body := StaticBody3D.new()
 	floor_body.name = "GrasslandGround"
 	floor_body.position.y = -0.3
-	var floor_mesh := MeshInstance3D.new()
-	var diamond_mesh := _create_diamond_ground_mesh()
-	floor_mesh.mesh = diamond_mesh
-	var grass_material := StandardMaterial3D.new()
-	grass_material.albedo_color = Color("#5fa84a")
-	grass_material.roughness = 1.0
-	grass_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	grass_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	floor_mesh.material_override = grass_material
-
-	# 바닥이 확실히 녹색으로 보이도록 넓은 평면 추가
-	var ground_plane := MeshInstance3D.new()
-	var plane_mesh := PlaneMesh.new()
-	plane_mesh.size = Vector2(FIELD_RADIUS * 4.0, FIELD_RADIUS * 4.0)
-	ground_plane.mesh = plane_mesh
-	ground_plane.material_override = grass_material
-	ground_plane.position.y = -0.35
-	add_child(ground_plane)
-	floor_body.add_child(floor_mesh)
+	var tile_size := 1.0
+	var half := 8
+	for x in range(-half, half):
+		for z in range(-half, half):
+			var tile := MeshInstance3D.new()
+			var box := BoxMesh.new()
+			box.size = Vector3(tile_size, 0.12, tile_size)
+			tile.mesh = box
+			tile.position = Vector3(x * tile_size + 0.5, random.randf_range(-0.08, 0.08), z * tile_size + 0.5)
+			var mat := StandardMaterial3D.new()
+			if (x + z) % 2 == 0:
+				mat.albedo_color = Color("#8fd16a")
+			else:
+				mat.albedo_color = Color("#4f9a3c")
+			mat.roughness = 1.0
+			tile.material_override = mat
+			add_child(tile)
 	var floor_collider := CollisionShape3D.new()
-	floor_collider.shape = diamond_mesh.create_trimesh_shape()
+	var box_shape := BoxShape3D.new()
+	box_shape.size = Vector3(16.0, 0.2, 16.0)
+	floor_collider.shape = box_shape
 	floor_body.add_child(floor_collider)
 	add_child(floor_body)
-	_add_diamond_boundary()
+	_add_square_boundary()
+
+	# 맵 오브젝트 모두 제거 (체스판만 유지)
 
 	# 맵 오브젝트 모두 제거 (바닥과 빨간 테두리 선만 유지)
 
@@ -253,12 +290,13 @@ func _create_diamond_ground_mesh() -> ArrayMesh:
 	return mesh
 
 
-func _add_diamond_boundary() -> void:
+func _add_square_boundary() -> void:
+	var half := 8.0
 	var corners := [
-		Vector3(0, 0, -FIELD_RADIUS),
-		Vector3(FIELD_RADIUS, 0, 0),
-		Vector3(0, 0, FIELD_RADIUS),
-		Vector3(-FIELD_RADIUS, 0, 0),
+		Vector3(-half, 0, -half),
+		Vector3(half, 0, -half),
+		Vector3(half, 0, half),
+		Vector3(-half, 0, half),
 	]
 	for index in range(corners.size()):
 		_add_boundary_line(corners[index], corners[(index + 1) % corners.size()])
@@ -275,11 +313,8 @@ func _add_boundary_line(start: Vector3, finish: Vector3) -> void:
 	line.position = midpoint + Vector3.UP * 0.05
 	line.rotation.y = atan2(edge.x, edge.z)
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("#ff3b30")
+	material.albedo_color = Color("#000000")
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.emission_enabled = true
-	material.emission = Color("#ff3b30")
-	material.emission_energy_multiplier = 0.6
 	line.material_override = material
 	add_child(line)
 
@@ -419,7 +454,7 @@ func _build_voxel_forest_decorations() -> void:
 	# 잔디/꽃 산포
 	for i in range(20):
 		var p := Vector3(random.randf_range(-20.0, 20.0), 0.0, random.randf_range(-20.0, 20.0))
-		if absf(p.x) + absf(p.z) >= FIELD_RADIUS - 1.0:
+		if absf(p.x) >= 7.5 or absf(p.z) >= 7.5:
 			continue
 		if Vector2(p.x, p.z).length() < 3.0:
 			continue
@@ -430,14 +465,14 @@ func _build_voxel_forest_decorations() -> void:
 	# 버섯 소수 배치
 	for i in range(3):
 		var p := Vector3(random.randf_range(-18.0, 18.0), 0.0, random.randf_range(-18.0, 18.0))
-		if absf(p.x) + absf(p.z) >= FIELD_RADIUS - 2.0:
+		if absf(p.x) >= 7.5 or absf(p.z) >= 7.5:
 			continue
 		_add_voxel_decoration(mushroom_path, p, Vector3.ONE * random.randf_range(0.9, 1.1), random.randf_range(0.0, TAU), false)
 
 	# 상자 소품
 	for i in range(2):
 		var p := Vector3(random.randf_range(-12.0, 12.0), 0.0, random.randf_range(-12.0, 12.0))
-		if absf(p.x) + absf(p.z) >= FIELD_RADIUS - 3.0:
+		if absf(p.x) >= 7.5 or absf(p.z) >= 7.5:
 			continue
 		var path: String = box_paths[random.randi_range(0, box_paths.size() - 1)]
 		_add_voxel_decoration(path, p, Vector3.ONE * 0.9, random.randf_range(0.0, TAU), true)
@@ -484,7 +519,7 @@ func _spawn_player() -> void:
 	# 기존 코드
 	# player.position = Vector3.ZERO
 	# 변경 코드 (Y축을 1.0만큼 공중으로 띄움)
-	player.position = Vector3(0.0, 1.0, 0.0)
+	player.position = Vector3(0.0, 0.0, 0.0)
 	player.health_changed.connect(_on_health_changed)
 	player.experience_changed.connect(_on_experience_changed)
 	player.level_changed.connect(_on_level_changed)
@@ -495,8 +530,19 @@ func _spawn_player() -> void:
 	camera = Camera3D.new()
 	camera.name = "FieldCamera"
 	camera.current = true
-	camera.fov = 55.0
+	camera.fov = 60.0
 	add_child(camera)
+
+	# AI 동료 캐릭터 출전
+	var companion_index := 1 if GameData.selected_character == 0 else 0
+	var companion: FieldPlayer = PlayerScript.new()
+	companion.name = "Companion"
+	companion.setup(self, GameData.CHARACTERS[companion_index])
+	companion.position = Vector3(2.0, 0.0, 0.0)
+	companion.auto_hunt_disabled = false
+	add_child(companion)
+	companions.append(companion)
+
 	_update_camera(1.0)
 
 
@@ -714,10 +760,10 @@ func _spawn_monster() -> void:
 	var enemy: FieldMonster = MonsterScript.new()
 	enemy.setup(self, player, data)
 	var angle := random.randf_range(0.0, TAU)
-	var distance := random.randf_range(10.0, 17.0)
+	var distance := random.randf_range(3.0, 5.0)
 	enemy.position = player.position + Vector3(cos(angle) * distance, 0.0, sin(angle) * distance)
-	enemy.position.x = clampf(enemy.position.x, -FIELD_RADIUS, FIELD_RADIUS)
-	enemy.position.z = clampf(enemy.position.z, -FIELD_RADIUS, FIELD_RADIUS)
+	enemy.position.x = clampf(enemy.position.x, -7.5, 7.5)
+	enemy.position.z = clampf(enemy.position.z, -7.5, 7.5)
 	add_child(enemy)
 	alive_monsters.append(enemy)
 
@@ -795,15 +841,15 @@ func _on_skill_pressed(index: int) -> void:
 	if int(player.get("level")) < int(skill["unlock_level"]):
 		_show_notification("스킬 %d는 Lv.%d에 해금됩니다." % [skill["id"], skill["unlock_level"]])
 		return
-	if skill_cooldowns[index] > 0.0:
+	if player.skill_cooldowns[index] > 0.0:
 		return
 	var skill_range := float(skill["range"]) * player.hitbox_size_multiplier
 	var target := _nearest_monster(player.global_position, skill_range)
 	if target != null:
 		_face_target(target)
-	skill_cooldowns[index] = float(skill["cooldown"])
-	casting_skill_index = index
-	skill_cast_remaining = float(skill["cast_time"]) * player.casting_time_multiplier
+	player.skill_cooldowns[index] = float(skill["cooldown"])
+	player.casting_skill_index = index
+	player.skill_cast_remaining = float(skill["cast_time"]) * player.casting_time_multiplier
 	GameAudio.play_sfx("skill_%d" % (index + 1))
 	player.play_skill_animation("skill_%d" % (index + 1), skill_cast_remaining + 0.45)
 	_update_skill_button(index)
@@ -874,7 +920,7 @@ func _auto_cast_combat(delta: float) -> void:
 
 	for index in range(CombatData.SKILLS.size()):
 		var skill: Dictionary = CombatData.SKILLS[index]
-		if skill_cooldowns[index] > 0.0:
+		if player.skill_cooldowns[index] > 0.0:
 			continue
 		if player.level < int(skill["unlock_level"]):
 			continue
@@ -894,6 +940,17 @@ func _face_target(target: FieldMonster) -> void:
 			player.rotation.y = atan2(-dir.x, -dir.z)
 
 
+func _nearest_character(origin: Vector3) -> FieldPlayer:
+	var best: FieldPlayer = player
+	var best_dist := INF
+	for c in [player] + companions:
+		if is_instance_valid(c) and not c.dead:
+			var d := origin.distance_to(c.global_position)
+			if d < best_dist:
+				best_dist = d
+				best = c
+	return best
+
 func _nearest_monster(origin: Vector3, range_value: float) -> FieldMonster:
 	var nearest: FieldMonster
 	var nearest_distance := range_value
@@ -906,6 +963,19 @@ func _nearest_monster(origin: Vector3, range_value: float) -> FieldMonster:
 			nearest_distance = distance
 	return nearest
 
+
+func _companion_auto_attack(companion: FieldPlayer) -> void:
+	var attack_range := companion.attack_range * companion.hitbox_size_multiplier
+	var target := _nearest_monster(companion.global_position, attack_range)
+	if target != null and companion.attack_cooldown <= 0.0 and companion.action_animation_remaining <= 0.0:
+		var dir := target.global_position - companion.global_position
+		dir.y = 0.0
+		if dir.length_squared() > 0.001:
+			companion.rotation.y = atan2(-dir.x, -dir.z)
+		companion.try_basic_attack()
+
+func get_enemies() -> Array:
+	return alive_monsters
 
 func _monsters_in_range(origin: Vector3, range_value: float) -> Array[FieldMonster]:
 	var found: Array[FieldMonster] = []
@@ -965,19 +1035,22 @@ func monster_defeated(at: Vector3, data: Dictionary) -> void:
 		if is_instance_valid(enemy) and not enemy.dead:
 			living_monsters.append(enemy)
 	alive_monsters = living_monsters
-	_spawn_drop(at, "experience", int(data["exp"]))
+	var target := _nearest_character(at)
+	_spawn_drop(at, "experience", int(data["exp"]), target)
 	if random.randf() < float(CombatData.DROP_RULES["gold_chance"]):
-		_spawn_drop(at + Vector3(0.35, 0.0, 0.0), "gold", int(data["gold"]))
+		_spawn_drop(at + Vector3(0.35, 0.0, 0.0), "gold", int(data["gold"]), target)
 	if random.randf() < float(CombatData.DROP_RULES["potion_chance"]):
 		_spawn_drop(
-			at + Vector3(-0.35, 0.0, 0.0), "potion", int(CombatData.DROP_RULES["potion_heal"])
+			at + Vector3(-0.35, 0.0, 0.0), "potion", int(CombatData.DROP_RULES["potion_heal"]), target
 		)
 
 
-func _spawn_drop(at: Vector3, kind: String, amount: int) -> void:
+func _spawn_drop(at: Vector3, kind: String, amount: int, target: FieldPlayer = null) -> void:
+	if target == null:
+		target = player
 	var drop: FieldDrop = DropScript.new()
-	drop.setup(self, player, kind, amount)
-	drop.position = at + Vector3.UP * 0.35
+	drop.setup(self, target, kind, amount)
+	drop.position = at + Vector3.UP * 0.05
 	add_child(drop)
 
 
@@ -1144,14 +1217,14 @@ func _update_skill_button(index: int) -> void:
 	var skill: Dictionary = CombatData.SKILLS[index]
 	var level := int(player.get("level"))
 	var unlocked := level >= int(skill["unlock_level"])
-	var remaining := skill_cooldowns[index]
+	var remaining := player.skill_cooldowns[index]
 	skill_buttons[index].disabled = (
-		not unlocked or remaining > 0.0 or paused or casting_skill_index >= 0
+		not unlocked or remaining > 0.0 or paused or player.casting_skill_index >= 0
 	)
 	if not unlocked:
 		skill_buttons[index].text = "🔒 S%d\nLv.%d" % [skill["id"], skill["unlock_level"]]
-	elif casting_skill_index == index:
-		skill_buttons[index].text = "S%d\n시전 %.1f" % [skill["id"], skill_cast_remaining]
+	elif player.casting_skill_index == index:
+		skill_buttons[index].text = "S%d\n시전 %.1f" % [skill["id"], player.skill_cast_remaining]
 	elif remaining > 0.0:
 		skill_buttons[index].text = "S%d\n%.1f초" % [skill["id"], remaining]
 	else:
@@ -1162,7 +1235,13 @@ func _update_camera(delta: float = 1.0 / 60.0) -> void:
 	if player == null or camera == null:
 		return
 	var interpolated_player_position := player.get_global_transform_interpolated().origin
-	var target := interpolated_player_position + CAMERA_OFFSET
+	var cos_pitch := cos(camera_pitch)
+	var offset := Vector3(
+		sin(camera_yaw) * cos_pitch * camera_distance,
+		sin(-camera_pitch) * camera_distance,
+		cos(camera_yaw) * cos_pitch * camera_distance
+	)
+	var target := interpolated_player_position + offset
 	var follow_weight := 1.0 - exp(-10.0 * delta)
 	camera.global_position = camera.global_position.lerp(target, follow_weight)
 	camera.look_at(interpolated_player_position + Vector3.UP * CAMERA_LOOK_HEIGHT, Vector3.UP)
@@ -1252,3 +1331,50 @@ func _return_to_menu() -> void:
 func _return_to_result() -> void:
 	get_tree().paused = false
 	ScreenRouter.go("result")
+
+
+func _build_field_decorations() -> void:
+	var base := "res://assets/field/"
+	_add_fbx(base + "misc_models/gazebo.fbx", Vector3(0, 0, 0), Vector3.ONE, 0.0, true)
+	for corner in [Vector3(FIELD_RADIUS - 4, 0, 0), Vector3(0, 0, FIELD_RADIUS - 4), Vector3(-FIELD_RADIUS + 4, 0, 0), Vector3(0, 0, -FIELD_RADIUS + 4)]:
+		_add_fbx(base + "misc_models/tower.fbx", corner, Vector3.ONE, random.randf_range(0.0, TAU), true)
+	var fence_path := base + "misc_models/fences/fence2_01.fbx"
+	for i in range(12):
+		var angle := TAU * float(i) / 12.0
+		var dist := FIELD_RADIUS - 1.0
+		var pos := Vector3(cos(angle) * dist, 0.0, sin(angle) * dist)
+		_add_fbx(fence_path, pos, Vector3.ONE, -angle + PI * 0.5, true)
+	for i in range(8):
+		var p := Vector3(random.randf_range(-20.0, 20.0), 0.0, random.randf_range(-20.0, 20.0))
+		if absf(p.x) >= 7.5 or absf(p.z) >= 7.5:
+			continue
+		if Vector2(p.x, p.z).length() < 4.0:
+			continue
+		var bed := base + "misc_models/flowers/flowerbed" + str(random.randi_range(1, 7)) + "_2x2.fbx"
+		_add_fbx(bed, p, Vector3.ONE, random.randf_range(0.0, TAU), false)
+	for i in range(6):
+		var p := Vector3(random.randf_range(-18.0, 18.0), 0.0, random.randf_range(-18.0, 18.0))
+		if absf(p.x) >= 7.5 or absf(p.z) >= 7.5:
+			continue
+		_add_fbx(base + "misc_models/stone/bench01.fbx", p, Vector3.ONE, random.randf_range(0.0, TAU), true)
+	_add_fbx(base + "misc_models/stone/fountain01_round.fbx", Vector3(6, 0, 6), Vector3.ONE, 0.0, true)
+	_add_fbx(base + "misc_models/stone/fountain02_square.fbx", Vector3(-6, 0, -6), Vector3.ONE, 0.0, true)
+	for i in range(4):
+		var p := Vector3(random.randf_range(-10.0, 10.0), 0.0, random.randf_range(-10.0, 10.0))
+		_add_fbx(base + "modular_hedge/basic/basic_3x1.fbx", p, Vector3.ONE, random.randf_range(0.0, TAU), true)
+
+
+func _add_fbx(path: String, position: Vector3, scale: Vector3, yaw: float, collidable: bool = false) -> void:
+	var scene := load(path) as PackedScene
+	if scene == null:
+		return
+	var instance: Node3D = scene.instantiate() as Node3D
+	if instance == null:
+		return
+	instance.position = position
+	instance.scale = scale
+	instance.rotation.y = yaw
+	add_child(instance)
+	if collidable and instance is Node3D:
+		# best-effort collision not auto-generated for FBX; leave visuals only
+		pass

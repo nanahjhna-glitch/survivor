@@ -16,6 +16,7 @@ const CHARACTERS := [
 			"scene": "res://assets/characters/char01/Model/char01.fbx",
 			"scale": 1.0,
 			"forward_rotation_degrees": 0.0,
+			"vertical_offset": -0.9,
 			"texture": "res://assets/characters/char01/Animations/FighterTexture.png",
 			"animations":
 			{
@@ -86,6 +87,7 @@ const CHARACTERS := [
 			"scene": "res://assets/characters/char02/Animations/T-Pose.fbx",
 			"scale": 1.0,
 			"forward_rotation_degrees": 0.0,
+			"vertical_offset": 0.0,
 			"texture": "res://assets/characters/char02/Animations/Texture.png",
 			"animations":
 			{

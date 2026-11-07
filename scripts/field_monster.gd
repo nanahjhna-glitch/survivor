@@ -83,9 +83,20 @@ func _update_health_bar() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if dead or not is_instance_valid(player) or player.dead:
+	if dead:
 		velocity = Vector3.ZERO
 		return
+	var target: FieldPlayer = null
+	if is_instance_valid(player) and not player.dead:
+		target = player
+	for companion in (arena.get("companions") if arena != null else []):
+		if is_instance_valid(companion) and not companion.dead:
+			if target == null or global_position.distance_to(companion.global_position) < global_position.distance_to(target.global_position):
+				target = companion
+	if target == null:
+		velocity = Vector3.ZERO
+		return
+	player = target
 	attack_timer = maxf(0.0, attack_timer - delta)
 	var offset := player.global_position - global_position
 	offset.y = 0.0
@@ -102,8 +113,6 @@ func _physics_process(delta: float) -> void:
 			attack_timer = 1.25
 			player.take_damage(float(monster_data["attack"]))
 	move_and_slide()
-	var diamond_distance := absf(global_position.x) + absf(global_position.z)
-	if diamond_distance > 25.0:
-		var boundary_scale := 25.0 / diamond_distance
-		global_position.x *= boundary_scale
-		global_position.z *= boundary_scale
+	if absf(global_position.x) > 5.5 or absf(global_position.z) > 5.5:
+		global_position.x = clampf(global_position.x, -7.5, 7.5)
+		global_position.z = clampf(global_position.z, -7.5, 7.5)

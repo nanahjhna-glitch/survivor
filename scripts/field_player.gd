@@ -59,6 +59,9 @@ var action_animation_remaining := 0.0
 var skill_movement_locked := false
 var skill_animation_name := ""
 var skill_movement_lock_remaining := 0.0
+var skill_cooldowns: Array[float] = [0.0, 0.0, 0.0, 0.0]
+var casting_skill_index := -1
+var skill_cast_remaining := 0.0
 var facing_target: Node3D
 var movement_animation_state := "idle"
 var animation_playback_speed := 1.0
@@ -206,6 +209,7 @@ func _build_model_visual(character: Dictionary) -> bool:
 	model.name = "CharacterModel"
 	model.scale = Vector3.ONE * float(visual.get("scale", 1.0))
 	model.rotation.y = deg_to_rad(float(visual.get("forward_rotation_degrees", 0.0)))
+	model.position.y += float(visual.get("vertical_offset", 0.0))
 	visual_root.add_child(model)
 	_apply_character_texture(model, str(visual.get("texture", "")))
 	model_animation_player = _find_animation_player(model)
@@ -621,14 +625,10 @@ func _physics_process(delta: float) -> void:
 		weapon.rotation.z = -sin((attack_animation_time / 0.28) * PI) * 1.15
 	move_and_slide()
 	_update_movement_animation(delta)
-	var diamond_distance := absf(global_position.x) + absf(global_position.z)
-	if diamond_distance > 25.0:
-		var boundary_scale := 25.0 / diamond_distance
-		global_position.x *= boundary_scale
-		global_position.z *= boundary_scale
-		var boundary_normal := (
-			Vector3(signf(global_position.x), 0.0, signf(global_position.z)).normalized()
-		)
+	if absf(global_position.x) > 5.5 or absf(global_position.z) > 5.5:
+		global_position.x = clampf(global_position.x, -7.5, 7.5)
+		global_position.z = clampf(global_position.z, -7.5, 7.5)
+		var boundary_normal := Vector3(signf(global_position.x), 0.0, signf(global_position.z)).normalized()
 		var outward_speed := velocity.dot(boundary_normal)
 		if outward_speed > 0.0:
 			velocity -= boundary_normal * outward_speed
