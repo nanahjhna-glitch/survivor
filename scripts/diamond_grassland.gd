@@ -135,11 +135,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 	if event is InputEventMouseMotion and camera_dragging:
 		camera_yaw -= event.relative.x * 0.005
-		camera_pitch = clampf(camera_pitch - event.relative.y * 0.005, -1.1, -0.2)
+		camera_pitch = clampf(camera_pitch - event.relative.y * 0.005, -1.4, 1.4)
 		return
 	if event is InputEventScreenDrag:
 		camera_yaw -= event.relative.x * 0.005
-		camera_pitch = clampf(camera_pitch - event.relative.y * 0.005, -1.1, -0.2)
+		camera_pitch = clampf(camera_pitch - event.relative.y * 0.005, -1.4, 1.4)
 		return
 	if event is InputEventMagnifyGesture:
 		camera_distance = clampf(camera_distance / event.factor, 8.0, 40.0)
@@ -1307,7 +1307,7 @@ func _update_camera(delta: float = 1.0 / 60.0) -> void:
 		camera_pitch = -0.35
 	elif auto_cast_enabled:
 		target_origin = Vector3.ZERO
-		camera_distance = 18.0
+		camera_distance = 22.0
 		camera_pitch = -0.7
 	else:
 		target_origin = player.get_global_transform_interpolated().origin
