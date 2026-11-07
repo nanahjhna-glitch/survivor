@@ -25,7 +25,7 @@ var companion_character_index := 0
 var top_time_label: Label
 var top_kills_label: Label
 var total_kills := 0
-var focused_character: FieldPlayer = null
+var camera_target: FieldPlayer = null
 var camera: Camera3D
 var joystick: GrasslandJoystick
 var hud_layer: CanvasLayer
@@ -131,7 +131,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.button_index == MOUSE_BUTTON_RIGHT or event.button_index == MOUSE_BUTTON_MIDDLE:
 			camera_dragging = event.pressed
 			if event.pressed:
-				focused_character = null
+				camera_target = null
 			return
 	if event is InputEventMouseMotion and camera_dragging:
 		camera_yaw -= event.relative.x * 0.005
@@ -629,7 +629,7 @@ func _build_hud() -> void:
 		panel.mouse_filter = Control.MOUSE_FILTER_STOP
 		panel.gui_input.connect(func(event: InputEvent) -> void:
 			if event is InputEventMouseButton and event.pressed:
-				focused_character = c
+				camera_target = c
 		)
 		var name_row := HBoxContainer.new()
 		var name_lbl := _hud_label(str(GameData.CHARACTERS[bottom_indices[bidx]]["name"]), 12)
@@ -890,7 +890,7 @@ func _on_attack_pressed() -> void:
 
 func _toggle_auto_cast() -> void:
 	auto_cast_enabled = not auto_cast_enabled
-	focused_character = null
+	camera_target = null
 	if auto_cast_button != null:
 		auto_cast_button.text = "자동: %s" % ("ON" if auto_cast_enabled else "OFF")
 
@@ -1301,8 +1301,8 @@ func _update_camera(delta: float = 1.0 / 60.0) -> void:
 	if player == null or camera == null:
 		return
 	var target_origin: Vector3
-	if focused_character != null and is_instance_valid(focused_character) and not focused_character.dead:
-		target_origin = focused_character.get_global_transform_interpolated().origin
+	if camera_target != null and is_instance_valid(camera_target) and not camera_target.dead:
+		target_origin = camera_target.get_global_transform_interpolated().origin
 		camera_distance = 6.0
 		camera_pitch = -0.35
 	elif auto_cast_enabled:
