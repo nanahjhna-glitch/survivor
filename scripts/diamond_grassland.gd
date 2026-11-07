@@ -21,6 +21,7 @@ enum AutoHuntState { SEARCH, APPROACH, CASTING, RECOVERY, SUSPENDED }
 
 var player: FieldPlayer
 var companions: Array[FieldPlayer] = []
+var companion_character_index := 0
 var camera: Camera3D
 var joystick: GrasslandJoystick
 var hud_layer: CanvasLayer
@@ -535,6 +536,7 @@ func _spawn_player() -> void:
 
 	# AI 동료 캐릭터 출전
 	var companion_index := 1 if GameData.selected_character == 0 else 0
+	companion_character_index = companion_index
 	var companion: FieldPlayer = PlayerScript.new()
 	companion.name = "Companion"
 	companion.setup(self, GameData.CHARACTERS[companion_index])
@@ -575,33 +577,7 @@ func _build_hud() -> void:
 	gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	gold_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.add_child(gold_label)
-	hp_bar = _make_bar(Color("#db6558"))
-	hp_bar.custom_minimum_size.x = 342
-	hp_bar.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	top.add_child(hp_bar)
-	exp_bar = _make_bar(Color("#55c6d1"))
-	exp_bar.custom_minimum_size = Vector2(20, 300)
-	exp_bar.fill_mode = ProgressBar.FILL_BOTTOM_TO_TOP
-	exp_bar.anchor_left = 0.0
-	exp_bar.anchor_top = 0.5
-	exp_bar.anchor_right = 0.0
-	exp_bar.anchor_bottom = 0.5
-	exp_bar.offset_left = 18
-	exp_bar.offset_top = -150
-	exp_bar.offset_right = 38
-	exp_bar.offset_bottom = 150
-	exp_label = _hud_label("", 14)
-	exp_label.anchor_left = 0.0
-	exp_label.anchor_top = 0.5
-	exp_label.anchor_right = 0.0
-	exp_label.anchor_bottom = 0.5
-	exp_label.offset_left = 42
-	exp_label.offset_top = -168
-	exp_label.offset_right = 180
-	exp_label.offset_bottom = -142
-	exp_label.visible = false
-	root.add_child(exp_bar)
-	root.add_child(exp_label)
+	# 기존 HP/EXP 바 제거 (캐릭터별 바 사용)
 
 	notification_label = _hud_label("", 23)
 	notification_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -620,9 +596,15 @@ func _build_hud() -> void:
 	char_bar_row.offset_top = 70
 	char_bar_row.add_theme_constant_override("separation", 8)
 	root.add_child(char_bar_row)
+	var char_indices := [GameData.selected_character, companion_character_index]
+	var idx := 0
 	for c in [player] + companions:
 		var col := VBoxContainer.new()
 		col.add_theme_constant_override("separation", 2)
+		var name_label := _hud_label(str(GameData.CHARACTERS[char_indices[idx]]["name"]), 12)
+		col.add_child(name_label)
+		var level_label := _hud_label("Lv.1", 11)
+		col.add_child(level_label)
 		var hp := _make_bar(Color("#db6558"))
 		hp.custom_minimum_size = Vector2(120, 14)
 		var exp := _make_bar(Color("#55c6d1"))
@@ -638,6 +620,10 @@ func _build_hud() -> void:
 			exp.max_value = required
 			exp.value = current
 		)
+		c.level_changed.connect(func(new_level: int, _u: int) -> void:
+			level_label.text = "Lv.%d" % new_level
+		)
+		idx += 1
 
 	joystick = JoystickScript.new()
 	joystick.position = Vector2(22, -178)
