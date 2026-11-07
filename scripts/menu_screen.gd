@@ -192,7 +192,7 @@ func _build_stage_select() -> void:
 		var slot := _panel()
 		slot.custom_minimum_size = Vector2(0, 64)
 		var col := _column_in(slot)
-		var idx := slot_indices[i] if slot_indices[i] < GameData.CHARACTERS.size() else 0
+		var idx: int = slot_indices[i] if slot_indices[i] < GameData.CHARACTERS.size() else 0
 		col.add_child(_label("슬롯 %d" % (i + 1), 12, MUTED))
 		col.add_child(_label(GameData.CHARACTERS[idx]["name"], 15, INK))
 		party_row.add_child(slot)
