@@ -809,8 +809,9 @@ func _spawn_monster() -> void:
 	var data: Dictionary = _choose_monster()
 	var enemy: FieldMonster = MonsterScript.new()
 	enemy.setup(self, player, data)
-	var angle := random.randf_range(0.0, TAU)
-	var distance := random.randf_range(3.0, 5.0)
+	var base_angles := [0.0, PI * 0.5, PI, PI * 1.5]
+	var angle := base_angles[random.randi_range(0, 3)] + random.randf_range(-0.35, 0.35)
+	var distance := random.randf_range(8.0, 12.0)
 	enemy.position = player.position + Vector3(cos(angle) * distance, 0.0, sin(angle) * distance)
 	enemy.position.x = clampf(enemy.position.x, -12.5, 12.5)
 	enemy.position.z = clampf(enemy.position.z, -12.5, 12.5)
