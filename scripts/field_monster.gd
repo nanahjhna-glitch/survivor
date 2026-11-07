@@ -210,9 +210,9 @@ func _select_target() -> void:
 		if score < best_distance:
 			best_distance = score
 			best_target = ally
-	if best_target != null and best_target != player:
+	if best_target != player:
 		player = best_target
-		target_lock_remaining = TARGET_LOCK_DURATION
+		target_lock_remaining = TARGET_LOCK_DURATION if best_target != null else 0.0
 
 
 func _monster_separation() -> Vector3:

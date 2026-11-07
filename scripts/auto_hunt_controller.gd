@@ -28,7 +28,12 @@ func setup(actor: FieldPlayer, field: Node3D) -> void:
 
 
 func update(delta: float) -> void:
-	if player == null or player.dead or player.auto_hunt_disabled:
+	if not is_instance_valid(player) or player.dead:
+		current_target = null
+		desired_move_direction = Vector3.ZERO
+		state = State.IDLE
+		return
+	if player.auto_hunt_disabled:
 		desired_move_direction = Vector3.ZERO
 		state = State.IDLE
 		return

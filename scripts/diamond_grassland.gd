@@ -89,7 +89,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if paused or player == null or player.dead:
+	if paused or player == null or not _has_living_party_members():
 		return
 	elapsed_time += delta
 	spawn_clock += delta
@@ -101,14 +101,15 @@ func _process(delta: float) -> void:
 			GameData.save_game()
 			progress_save_pending = false
 			progress_save_timer = 0.0
-	for index in range(player.skill_cooldowns.size()):
-		player.skill_cooldowns[index] = maxf(0.0, player.skill_cooldowns[index] - delta)
-		_update_skill_button(index)
-	if player.casting_skill_index >= 0:
-		player.skill_cast_remaining = maxf(0.0, player.skill_cast_remaining - delta)
-		if player.skill_cast_remaining == 0.0:
-			_execute_skill(player, player.casting_skill_index)
-			player.casting_skill_index = -1
+	if is_instance_valid(player) and not player.dead:
+		for index in range(player.skill_cooldowns.size()):
+			player.skill_cooldowns[index] = maxf(0.0, player.skill_cooldowns[index] - delta)
+			_update_skill_button(index)
+		if player.casting_skill_index >= 0:
+			player.skill_cast_remaining = maxf(0.0, player.skill_cast_remaining - delta)
+			if player.skill_cast_remaining == 0.0:
+				_execute_skill(player, player.casting_skill_index)
+				player.casting_skill_index = -1
 	# 동료 스킬 쿨다운/시전 처리
 	for companion in companions:
 		if not is_instance_valid(companion) or companion.dead:
@@ -137,7 +138,7 @@ func _process(delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if player == null or player.dead:
+	if player == null or not _has_living_party_members():
 		return
 	spatial_rebuild_timer -= delta
 	if spatial_rebuild_timer <= 0.0:
@@ -869,15 +870,16 @@ func _disabled_button_style() -> StyleBoxFlat:
 
 
 func _spawn_monster() -> void:
-	if alive_monsters.size() >= MAX_MONSTERS or player == null:
+	var spawn_target := _nearest_character(player.global_position) if player != null else null
+	if alive_monsters.size() >= MAX_MONSTERS or not is_instance_valid(spawn_target):
 		return
-	var data: Dictionary = _choose_monster()
+	var data: Dictionary = _choose_monster(spawn_target.level)
 	var enemy: FieldMonster = MonsterScript.new()
-	enemy.setup(self, player, data)
+	enemy.setup(self, spawn_target, data)
 	var base_angles := [0.0, PI * 0.5, PI, PI * 1.5]
 	var angle: float = base_angles[random.randi_range(0, 3)] + random.randf_range(-0.35, 0.35)
 	var distance := random.randf_range(8.0, 12.0)
-	enemy.position = player.position + Vector3(cos(angle) * distance, 0.0, sin(angle) * distance)
+	enemy.position = spawn_target.position + Vector3(cos(angle) * distance, 0.0, sin(angle) * distance)
 	enemy.position.x = clampf(enemy.position.x, -12.5, 12.5)
 	enemy.position.z = clampf(enemy.position.z, -12.5, 12.5)
 	add_child(enemy)
@@ -888,8 +890,7 @@ func _spawn_monster() -> void:
 	monster_spatial_cells[cell] = cell_enemies
 
 
-func _choose_monster() -> Dictionary:
-	var level := int(player.get("level"))
+func _choose_monster(level: int) -> Dictionary:
 	if elapsed_time > 100.0 and level >= 7 and random.randf() < 0.12:
 		return CombatData.MONSTERS[4]
 	var choices: Array[int] = [0, 0, 0, 1, 1, 3]
@@ -1148,7 +1149,7 @@ func _face_target(actor: FieldPlayer, target: FieldMonster) -> void:
 
 
 func _nearest_character(origin: Vector3) -> FieldPlayer:
-	var best: FieldPlayer = player
+	var best: FieldPlayer
 	var best_dist := INF
 	for c in [player] + companions:
 		if is_instance_valid(c) and not c.dead:
@@ -1157,6 +1158,13 @@ func _nearest_character(origin: Vector3) -> FieldPlayer:
 				best_dist = d
 				best = c
 	return best
+
+
+func _has_living_party_members() -> bool:
+	for member in [player] + companions:
+		if is_instance_valid(member) and not member.dead:
+			return true
+	return false
 
 func _nearest_monster(origin: Vector3, range_value: float) -> FieldMonster:
 	var nearest: FieldMonster
@@ -1448,13 +1456,10 @@ func _choose_level_up_card(card_id: String) -> void:
 
 func _on_party_member_died(member: FieldPlayer) -> void:
 	GameAudio.play_sfx("death")
+	if member.auto_hunt_controller != null:
+		member.auto_hunt_controller.update(0.0)
 	# 생존 파티원이 있으면 계속 진행
-	var any_alive := false
-	for m in [player] + companions:
-		if is_instance_valid(m) and not m.dead:
-			any_alive = true
-			break
-	if any_alive:
+	if _has_living_party_members():
 		_show_notification("파티원이 쓰러졌습니다.", 1.5)
 		if camera_target == member or GameData.camera_target_slot == member.party_slot:
 			_select_next_camera_target(member.party_slot)
@@ -1591,7 +1596,7 @@ func _update_camera(delta: float = 1.0 / 60.0) -> void:
 
 
 func _toggle_pause() -> void:
-	if player != null and player.dead:
+	if not _has_living_party_members():
 		return
 	paused = not paused
 	if paused:
@@ -1646,7 +1651,7 @@ func _show_end_panel(title: String, message: String) -> void:
 	pause_detail_label.add_theme_color_override("font_color", Color("#53606a"))
 	pause_detail_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	content.add_child(pause_detail_label)
-	if player != null and not player.dead:
+	if _has_living_party_members():
 		_add_panel_button(content, "계속하기", _toggle_pause)
 		_add_panel_button(content, "전투 정보", _show_battle_info)
 		_add_panel_button(content, "설정", _show_pause_settings)
