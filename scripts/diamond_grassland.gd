@@ -107,6 +107,17 @@ func _process(delta: float) -> void:
 		if player.skill_cast_remaining == 0.0:
 			_execute_skill(player.casting_skill_index)
 			player.casting_skill_index = -1
+	# 동료 스킬 쿨다운/시전 처리
+	for companion in companions:
+		if not is_instance_valid(companion) or companion.dead:
+			continue
+		for index in range(companion.skill_cooldowns.size()):
+			companion.skill_cooldowns[index] = maxf(0.0, companion.skill_cooldowns[index] - delta)
+		if companion.casting_skill_index >= 0:
+			companion.skill_cast_remaining = maxf(0.0, companion.skill_cast_remaining - delta)
+			if companion.skill_cast_remaining == 0.0:
+				_execute_skill_for(companion, companion.casting_skill_index)
+				companion.casting_skill_index = -1
 	if auto_cast_enabled:
 		auto_attack_scan_timer -= delta
 		if auto_attack_scan_timer <= 0.0:
@@ -137,6 +148,7 @@ func _physics_process(delta: float) -> void:
 			and actor.auto_hunt_controller != null
 		):
 			actor.auto_hunt_controller.update(delta)
+			_try_companion_auto_skill(actor)
 	_update_keyboard_movement()
 
 
@@ -1000,6 +1012,67 @@ func _execute_skill(index: int) -> void:
 	_show_notification("%s!" % skill["name"])
 	_update_skill_button(index)
 
+
+func _cast_skill_for(actor: FieldPlayer, index: int) -> void:
+	if actor == null or actor.dead or actor.casting_skill_index >= 0:
+		return
+	var skill: Dictionary = CombatData.SKILLS[index]
+	if int(actor.get("level")) < int(skill["unlock_level"]):
+		return
+	if actor.skill_cooldowns[index] > 0.0:
+		return
+	var skill_range := float(skill["range"]) * actor.hitbox_size_multiplier
+	var range_value := skill_range
+	actor.skill_cooldowns[index] = float(skill["cooldown"])
+	actor.casting_skill_index = index
+	actor.skill_cast_remaining = float(skill["cast_time"]) * actor.casting_time_multiplier
+	actor.play_skill_animation("skill_%d" % (index + 1), actor.skill_cast_remaining + 0.45)
+
+func _execute_skill_for(actor: FieldPlayer, index: int) -> void:
+	if actor == null or actor.dead:
+		return
+	var skill: Dictionary = CombatData.SKILLS[index]
+	var range_value := float(skill["range"]) * actor.hitbox_size_multiplier
+	var targets := _monsters_in_range(actor.global_position, range_value)
+	var damage_type: String = skill["damage_type"]
+	if index == 0:
+		for enemy in targets:
+			_deal_skill_damage_for(actor, enemy, float(skill["damage"]), damage_type)
+	elif index == 1:
+		var nearest := _nearest_monster(actor.global_position, range_value)
+		if nearest != null:
+			var impact := nearest.global_position
+			var impact_radius := 2.4 * actor.hitbox_size_multiplier
+			for enemy in _monsters_in_range(impact, impact_radius):
+				_deal_skill_damage_for(actor, enemy, float(skill["damage"]), damage_type)
+	elif index == 2:
+		for enemy in targets:
+			_deal_skill_damage_for(actor, enemy, float(skill["damage"]), damage_type)
+	else:
+		for enemy in targets:
+			_deal_skill_damage_for(actor, enemy, float(skill["damage"]), damage_type)
+
+func _deal_skill_damage_for(actor: FieldPlayer, enemy: FieldMonster, damage: float, damage_type: String) -> void:
+	var is_ranged := actor.attack_style == "ranged" and damage_type == "physical"
+	var final_damage := actor.calculate_outgoing_damage(damage, damage_type, is_ranged)
+	if final_damage > 0.0:
+		enemy.apply_damage(final_damage)
+
+func _try_companion_auto_skill(actor: FieldPlayer) -> void:
+	if actor == null or actor.dead or actor == player:
+		return
+	if actor.casting_skill_index >= 0:
+		return
+	for index in AUTO_SKILL_PRIORITY:
+		var skill: Dictionary = CombatData.SKILLS[index]
+		if actor.skill_cooldowns[index] > 0.0:
+			continue
+		if int(actor.get("level")) < int(skill["unlock_level"]):
+			continue
+		var skill_range := float(skill["range"]) * actor.hitbox_size_multiplier
+		_cast_skill_for(actor, index)
+		if actor.casting_skill_index >= 0:
+			return
 
 func _deal_skill_damage(enemy: FieldMonster, damage: float, damage_type: String) -> void:
 	var is_ranged := player.attack_style == "ranged" and damage_type == "physical"
