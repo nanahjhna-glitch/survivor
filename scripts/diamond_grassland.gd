@@ -1307,8 +1307,9 @@ func _update_camera(delta: float = 1.0 / 60.0) -> void:
 		camera_pitch = -0.35
 	elif auto_cast_enabled:
 		target_origin = Vector3.ZERO
-		camera_distance = 22.0
-		camera_pitch = -0.7
+		camera_distance = 34.0
+		camera_pitch = -0.8
+		camera_yaw = 0.0
 	else:
 		target_origin = player.get_global_transform_interpolated().origin
 	var cos_pitch := cos(camera_pitch)
