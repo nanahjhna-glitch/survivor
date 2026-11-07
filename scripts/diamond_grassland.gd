@@ -52,9 +52,9 @@ var auto_hunt_move_direction := Vector3.ZERO
 var running := false
 var run_button_held := false
 var paused := false
-var camera_yaw := 0.0
-var camera_pitch := -0.4
-var camera_distance := 16.0
+var camera_yaw := 0.785
+var camera_pitch := -0.6
+var camera_distance := 12.0
 var camera_dragging := false
 var random := RandomNumberGenerator.new()
 var alive_monsters: Array[FieldMonster] = []
@@ -129,11 +129,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 	if event is InputEventMouseMotion and camera_dragging:
 		camera_yaw -= event.relative.x * 0.005
-		camera_pitch = clampf(camera_pitch - event.relative.y * 0.005, -0.9, -0.1)
+		camera_pitch = clampf(camera_pitch - event.relative.y * 0.005, -1.1, -0.2)
 		return
 	if event is InputEventScreenDrag:
 		camera_yaw -= event.relative.x * 0.005
-		camera_pitch = clampf(camera_pitch - event.relative.y * 0.005, -0.9, -0.1)
+		camera_pitch = clampf(camera_pitch - event.relative.y * 0.005, -1.1, -0.2)
 		return
 	if event is InputEventMagnifyGesture:
 		camera_distance = clampf(camera_distance / event.factor, 8.0, 40.0)
@@ -1289,7 +1289,7 @@ func _update_camera(delta: float = 1.0 / 60.0) -> void:
 		cos(camera_yaw) * cos_pitch * camera_distance
 	)
 	var target := interpolated_player_position + offset
-	var follow_weight := 1.0 - exp(-10.0 * delta)
+	var follow_weight := 1.0 - exp(-14.0 * delta)
 	camera.global_position = camera.global_position.lerp(target, follow_weight)
 	camera.look_at(interpolated_player_position + Vector3.UP * CAMERA_LOOK_HEIGHT, Vector3.UP)
 
