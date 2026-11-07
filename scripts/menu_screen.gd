@@ -108,11 +108,14 @@ func _build_page() -> void:
 
 func _build_main_menu() -> void:
 	_add_text_card("PIXEL QUEST", "작은 영웅의 큰 모험")
+	page_body.add_child(_label("Lv.%d  |  골드 %d  |  보석 %d" % [GameData.player_level, GameData.gold, GameData.gems], 16, GOLD_DARK))
 	_add_hero_card()
 	_add_text_card("오늘도 모험을 떠나 볼까요?", "간결한 한 판 액션 로그라이크")
-	_add_action("모험 시작", func(): _go("character_select"), true)
+	_add_action("전투 시작", func(): _go("character_select"), true)
+	footer.add_child(_footer_button("영웅", "character_select"))
 	footer.add_child(_footer_button("영구 성장", "permanent_growth"))
 	footer.add_child(_footer_button("도감", "collection"))
+	footer.add_child(_footer_button("업적", "collection"))
 	footer.add_child(_footer_button("설정", "settings"))
 
 
