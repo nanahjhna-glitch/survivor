@@ -1,7 +1,8 @@
 extends Node
 
-const PARTY_SIZE := 6
+var party_size: int = CHARACTERS.size()
 const SAVE_PATH := "user://survivor_save.cfg"
+const DB_PATH := "user://survivor_save.db"
 
 const CHARACTERS := [
 	{
@@ -146,106 +147,6 @@ const CHARACTERS := [
 		},
 		"color": Color("#e89b59"),
 	},
-	{
-		"name": "숲의 궁수",
-		"title": "빠르고 정확한 사냥꾼",
-		"weapon": "참나무 활",
-		"passive": "이동 속도 +10%",
-		"stats": [60, 85, 65],
-		"attack_style": "ranged",
-		"attributes": {"STR": 3, "AGI": 5, "VIT": 3, "INT": 2, "DEX": 5, "LUK": 3},
-		"visual":
-		{
-			"scene": "res://assets/characters/char02/Model/char02.fbx",
-			"scale": 1.0,
-			"forward_rotation_degrees": 8.0,
-			"vertical_offset": 0.0,
-			"animations":
-			{
-				"idle":
-				{
-					"scene": "res://assets/characters/char02/Animations/Fighting Idle.fbx",
-					"clip": "mixamo",
-				},
-			},
-		},
-		"color": Color("#61b778"),
-	},
-	{
-		"name": "별빛 마법사",
-		"title": "원거리 마법 전문가",
-		"weapon": "초보자 지팡이",
-		"passive": "공격력 +10%",
-		"stats": [55, 70, 90],
-		"attack_style": "magic",
-		"attributes": {"STR": 2, "AGI": 3, "VIT": 3, "INT": 5, "DEX": 4, "LUK": 4},
-		"visual":
-		{
-			"scene": "res://assets/characters/char01/Model/char01.fbx",
-			"scale": 1.0,
-			"forward_rotation_degrees": -8.0,
-			"vertical_offset": -0.9,
-			"animations":
-			{
-				"idle":
-				{
-					"scene": "res://assets/characters/char01/Animations/Fighting Idle.fbx",
-					"clip": "mixamo_com",
-				},
-			},
-		},
-		"color": Color("#9b7ce0"),
-	},
-	{
-		"name": "룬 수호자",
-		"title": "견고한 방패 전사",
-		"weapon": "룬 각인 방패",
-		"passive": "물리 방어력 +10%",
-		"stats": [65, 50, 95],
-		"attack_style": "melee",
-		"attributes": {"STR": 4, "AGI": 2, "VIT": 6, "INT": 2, "DEX": 2, "LUK": 2},
-		"visual":
-		{
-			"scene": "res://assets/characters/char01/Model/char01.fbx",
-			"scale": 1.0,
-			"forward_rotation_degrees": 0.0,
-			"vertical_offset": -0.9,
-			"animations":
-			{
-				"idle":
-				{
-					"scene": "res://assets/characters/char01/Animations/Fighting Idle.fbx",
-					"clip": "mixamo_com",
-				},
-			},
-		},
-		"color": Color("#d0a94f"),
-	},
-	{
-		"name": "황혼 치유사",
-		"title": "빛을 다루는 지원가",
-		"weapon": "황혼의 성서",
-		"passive": "회복 효과 +10%",
-		"stats": [50, 65, 75],
-		"attack_style": "magic",
-		"attributes": {"STR": 1, "AGI": 3, "VIT": 4, "INT": 6, "DEX": 3, "LUK": 3},
-		"visual":
-		{
-			"scene": "res://assets/characters/char02/Model/char02.fbx",
-			"scale": 1.0,
-			"forward_rotation_degrees": 0.0,
-			"vertical_offset": 0.0,
-			"animations":
-			{
-				"idle":
-				{
-					"scene": "res://assets/characters/char02/Animations/Fighting Idle.fbx",
-					"clip": "mixamo",
-				},
-			},
-		},
-		"color": Color("#d77f9b"),
-	},
 ]
 
 const STAGES := [
@@ -265,7 +166,7 @@ var gold := 500
 var gems := 25
 var selected_character := 0
 var selected_detail_character := 0
-var party_characters: Array[int] = [0, 1, 2, 3, 4, 5]
+var party_characters: Array[int] = [0, 1]
 var camera_target_slot := 0
 var selected_party_slot := 0
 var selected_stage := 0
@@ -295,8 +196,8 @@ var hero_equipment: Dictionary = {}
 var hero_equipped_skills: Dictionary = {}
 var codex_monsters: Array[String] = ["slime"]
 var codex_reward_claimed: Dictionary = {}
-var party_slot_levels: Array[int] = [1, 1, 1, 1, 1, 1]
-var party_slot_experience: Array[int] = [0, 0, 0, 0, 0, 0]
+var party_slot_levels: Array[int] = [1, 1]
+var party_slot_experience: Array[int] = [0, 0]
 var party_slot_progress_loaded := false
 
 
@@ -317,38 +218,167 @@ func _ready() -> void:
 		_initialize_party_slot_progress()
 
 
-func load_game() -> void:
+func _open_db() -> SQLite:
+	var db := SQLite.new()
+	db.path = DB_PATH
+	db.open_db()
+	_ensure_schema(db)
+	return db
+
+func _ensure_schema(db: SQLite) -> void:
+	db.query("""
+	CREATE TABLE IF NOT EXISTS profile (
+		key TEXT PRIMARY KEY,
+		value TEXT
+	);
+	""")
+	db.query("""
+	CREATE TABLE IF NOT EXISTS hero (
+		character_index INTEGER PRIMARY KEY,
+		level INTEGER,
+		exp INTEGER,
+		rank INTEGER,
+		equipment TEXT,
+		skills TEXT
+	);
+	""")
+	db.query("""
+	CREATE TABLE IF NOT EXISTS party (
+		slot INTEGER PRIMARY KEY,
+		character_index INTEGER
+	);
+	""")
+	db.query("""
+	CREATE TABLE IF NOT EXISTS growth (
+		stat_key TEXT PRIMARY KEY,
+		value INTEGER
+	);
+	""")
+	db.query("""
+	CREATE TABLE IF NOT EXISTS codex_monsters (
+		monster_id TEXT PRIMARY KEY
+	);
+	""")
+	db.query("""
+	CREATE TABLE IF NOT EXISTS codex_rewards (
+		reward_key TEXT PRIMARY KEY,
+		claimed INTEGER
+	);
+	""")
+	db.query("""
+	CREATE TABLE IF NOT EXISTS party_progress (
+		slot INTEGER PRIMARY KEY,
+		level INTEGER,
+		exp INTEGER
+	);
+	""")
+
+func _migrate_from_cfg() -> void:
 	var config := ConfigFile.new()
 	if config.load(SAVE_PATH) != OK:
 		return
-	# Run levels are temporary; retain the field for old saves but always start at level 1.
+	var db := _open_db()
+	# profile
+	var pairs := {
+		"gold": gold, "gems": gems, "character": selected_character,
+		"camera_target_slot": camera_target_slot, "stage": selected_stage,
+		"sound": sound_enabled, "vibration": vibration_enabled,
+	}
+	# We'll just run save_game after populating in-memory from cfg, then delete cfg.
+	# Simpler: load into memory using existing logic by temporarily calling legacy loader.
+	db.close_db()
+
+func load_game() -> void:
+	# Migrate legacy cfg if db missing
+	var db_file := FileAccess.file_exists(DB_PATH)
+	var cfg_exists := FileAccess.file_exists(SAVE_PATH)
+	if (not db_file) and cfg_exists:
+		# Load legacy into memory via helper
+		_load_legacy_cfg()
+		save_game()
+		# backup cfg
+		DirAccess.rename_absolute(SAVE_PATH, SAVE_PATH + ".bak")
+		return
+	var db := _open_db()
+	# profile
+	var rows = db.query_result if false else null
+	db.query("SELECT key, value FROM profile")
+	for r in db.query_result:
+		match r["key"]:
+			"gold": gold = maxi(0, int(r["value"]))
+			"gems": gems = maxi(0, int(r["value"]))
+			"character": selected_character = clampi(int(r["value"]), 0, CHARACTERS.size() - 1)
+			"camera_target_slot": camera_target_slot = clampi(int(r["value"]), 0, party_size - 1)
+			"stage": selected_stage = clampi(int(r["value"]), 0, STAGES.size() - 1)
+			"sound": sound_enabled = bool(int(r["value"]))
+			"vibration": vibration_enabled = bool(int(r["value"]))
+	# growth
+	db.query("SELECT stat_key, value FROM growth")
+	for r in db.query_result:
+		if permanent_stats.has(r["stat_key"]):
+			permanent_stats[r["stat_key"]] = int(r["value"])
+	# hero
+	db.query("SELECT * FROM hero")
+	for r in db.query_result:
+		var i := int(r["character_index"])
+		hero_levels[i] = maxi(1, int(r["level"]))
+		hero_experience[i] = maxi(0, int(r["exp"]))
+		hero_ranks[i] = clampi(int(r["rank"]), 0, 5)
+		hero_equipment[i] = str(r["equipment"])
+		var sk = JSON.parse_string(str(r["skills"]))
+		if sk is Array:
+			hero_equipped_skills[i] = sk
+	# party
+	db.query("SELECT slot, character_index FROM party")
+	for r in db.query_result:
+		var slot := int(r["slot"])
+		if slot >= 0 and slot < party_characters.size():
+			party_characters[slot] = int(r["character_index"])
+	# codex
+	db.query("SELECT monster_id FROM codex_monsters")
+	codex_monsters.clear()
+	for r in db.query_result:
+		codex_monsters.append(str(r["monster_id"]))
+	db.query("SELECT reward_key, claimed FROM codex_rewards")
+	codex_reward_claimed.clear()
+	for r in db.query_result:
+		codex_reward_claimed[str(r["reward_key"])] = bool(int(r["claimed"]))
+	# party progress
+	db.query("SELECT slot, level, exp FROM party_progress")
+	for r in db.query_result:
+		var slot := int(r["slot"])
+		if slot >= 0 and slot < party_slot_levels.size():
+			party_slot_levels[slot] = maxi(1, int(r["level"]))
+			party_slot_experience[slot] = maxi(0, int(r["exp"]))
+	db.close_db()
+	_normalize_party()
+	player_level = 1
+	party_slot_progress_loaded = true
+
+
+func _load_legacy_cfg() -> void:
+	var config := ConfigFile.new()
+	if config.load(SAVE_PATH) != OK:
+		return
 	player_level = 1
 	gold = maxi(0, int(config.get_value("profile", "gold", gold)))
 	gems = maxi(0, int(config.get_value("profile", "gems", gems)))
-	selected_character = clampi(
-		int(config.get_value("profile", "character", 0)), 0, CHARACTERS.size() - 1
-	)
+	selected_character = clampi(int(config.get_value("profile", "character", 0)), 0, CHARACTERS.size() - 1)
 	var saved_party: Variant = config.get_value("profile", "party", [])
 	if saved_party is Array:
-		for i in range(mini(PARTY_SIZE, saved_party.size())):
+		for i in range(mini(party_size, saved_party.size())):
 			party_characters[i] = clampi(int(saved_party[i]), 0, CHARACTERS.size() - 1)
 	if not party_characters.is_empty():
 		party_characters[0] = selected_character
 	_normalize_party()
-	camera_target_slot = clampi(
-		int(config.get_value("profile", "camera_target_slot", 0)), 0, PARTY_SIZE - 1
-	)
+	camera_target_slot = clampi(int(config.get_value("profile", "camera_target_slot", 0)), 0, party_size - 1)
 	selected_stage = clampi(int(config.get_value("profile", "stage", 0)), 0, STAGES.size() - 1)
-	var saved_stats: Variant = config.get_value(
-		"growth", "permanent_stats", config.get_value("growth", "upgrades", {})
-	)
+	var saved_stats: Variant = config.get_value("growth", "permanent_stats", config.get_value("growth", "upgrades", {}))
 	if saved_stats is Dictionary:
 		var legacy_mapping := {"power": "STR", "vitality": "VIT", "fortune": "LUK"}
 		for legacy_key in legacy_mapping:
 			var stat_key: String = legacy_mapping[legacy_key]
-			permanent_stats[stat_key] = maxi(
-				int(permanent_stats[stat_key]), int(saved_stats.get(legacy_key, 0))
-			)
+			permanent_stats[stat_key] = maxi(int(permanent_stats[stat_key]), int(saved_stats.get(legacy_key, 0)))
 		for key in permanent_stats:
 			permanent_stats[key] = maxi(int(permanent_stats[key]), int(saved_stats.get(key, 0)))
 	sound_enabled = bool(config.get_value("settings", "sound", true))
@@ -357,9 +387,7 @@ func load_game() -> void:
 		hero_levels[i] = maxi(1, int(config.get_value("hero", "level_%d" % i, 1)))
 		hero_experience[i] = maxi(0, int(config.get_value("hero", "exp_%d" % i, 0)))
 		hero_ranks[i] = clampi(int(config.get_value("hero", "rank_%d" % i, 0)), 0, 5)
-		hero_equipment[i] = str(
-			config.get_value("hero", "equipment_%d" % i, CHARACTERS[i]["weapon"])
-		)
+		hero_equipment[i] = str(config.get_value("hero", "equipment_%d" % i, CHARACTERS[i]["weapon"]))
 		var skills_key := "skills_%d" % i
 		var saved_skills: Variant = config.get_value("hero", skills_key, [])
 		if config.has_section_key("hero", skills_key) and saved_skills is Array:
@@ -375,52 +403,44 @@ func load_game() -> void:
 	var saved_rewards: Variant = config.get_value("collection", "rewards", {})
 	codex_reward_claimed = saved_rewards.duplicate() if saved_rewards is Dictionary else {}
 	_initialize_party_slot_progress()
-	for slot in range(PARTY_SIZE):
+	for slot in range(party_size):
 		var level_key := "level_%d" % slot
 		var experience_key := "exp_%d" % slot
 		if config.has_section_key("party_progress", level_key):
-			party_slot_levels[slot] = maxi(
-				1, int(config.get_value("party_progress", level_key, party_slot_levels[slot]))
-			)
+			party_slot_levels[slot] = maxi(1, int(config.get_value("party_progress", level_key, party_slot_levels[slot])))
 		if config.has_section_key("party_progress", experience_key):
-			party_slot_experience[slot] = maxi(
-				0,
-				int(
-					config.get_value(
-						"party_progress", experience_key, party_slot_experience[slot]
-					)
-				)
-			)
-	party_slot_progress_loaded = true
-
+			party_slot_experience[slot] = maxi(0, int(config.get_value("party_progress", experience_key, party_slot_experience[slot])))
 
 func save_game() -> void:
-	var config := ConfigFile.new()
-	config.set_value("profile", "level", 1)
-	config.set_value("profile", "gold", gold)
-	config.set_value("profile", "gems", gems)
-	config.set_value("profile", "character", selected_character)
-	config.set_value("profile", "party", party_characters)
-	config.set_value("profile", "camera_target_slot", camera_target_slot)
-	config.set_value("profile", "stage", selected_stage)
-	config.set_value("growth", "permanent_stats", permanent_stats)
+	var db := _open_db()
+	# profile upserts
+	var profile_pairs := {
+		"gold": gold, "gems": gems, "character": selected_character,
+		"camera_target_slot": camera_target_slot, "stage": selected_stage,
+		"sound": int(sound_enabled), "vibration": int(vibration_enabled),
+	}
+	for k in profile_pairs:
+		db.query_with_bindings("INSERT INTO profile (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [k, str(profile_pairs[k])])
+	# growth
+	for key in permanent_stats:
+		db.query_with_bindings("INSERT INTO growth (stat_key, value) VALUES (?, ?) ON CONFLICT(stat_key) DO UPDATE SET value=excluded.value", [key, int(permanent_stats[key])])
+	# hero
 	for i in range(CHARACTERS.size()):
-		config.set_value("hero", "level_%d" % i, int(hero_levels.get(i, 1)))
-		config.set_value("hero", "exp_%d" % i, int(hero_experience.get(i, 0)))
-		config.set_value("hero", "rank_%d" % i, int(hero_ranks.get(i, 0)))
-		config.set_value("hero", "equipment_%d" % i, str(hero_equipment.get(i, CHARACTERS[i]["weapon"])))
-		config.set_value("hero", "skills_%d" % i, hero_equipped_skills.get(i, []))
-	config.set_value("collection", "monsters", codex_monsters)
-	config.set_value("collection", "rewards", codex_reward_claimed)
-	for slot in range(PARTY_SIZE):
-		config.set_value("party_progress", "level_%d" % slot, party_slot_levels[slot])
-		config.set_value("party_progress", "exp_%d" % slot, party_slot_experience[slot])
-	config.set_value("settings", "sound", sound_enabled)
-	config.set_value("settings", "vibration", vibration_enabled)
-	var error := config.save(SAVE_PATH)
-	if error != OK:
-		push_error("게임 데이터를 저장하지 못했습니다: %s" % error_string(error))
-
+		db.query_with_bindings("INSERT INTO hero (character_index, level, exp, rank, equipment, skills) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(character_index) DO UPDATE SET level=excluded.level, exp=excluded.exp, rank=excluded.rank, equipment=excluded.equipment, skills=excluded.skills", [i, int(hero_levels.get(i, 1)), int(hero_experience.get(i, 0)), int(hero_ranks.get(i, 0)), str(hero_equipment.get(i, CHARACTERS[i]["weapon"])), JSON.stringify(hero_equipped_skills.get(i, []))])
+	# party
+	for slot in range(party_size):
+		db.query_with_bindings("INSERT INTO party (slot, character_index) VALUES (?, ?) ON CONFLICT(slot) DO UPDATE SET character_index=excluded.character_index", [slot, int(party_characters[slot])])
+	# codex monsters
+	db.query("DELETE FROM codex_monsters")
+	for m in codex_monsters:
+		db.query_with_bindings("INSERT OR IGNORE INTO codex_monsters (monster_id) VALUES (?)", [m])
+	# codex rewards
+	for k in codex_reward_claimed:
+		db.query_with_bindings("INSERT INTO codex_rewards (reward_key, claimed) VALUES (?, ?) ON CONFLICT(reward_key) DO UPDATE SET claimed=excluded.claimed", [k, int(codex_reward_claimed[k])])
+	# party progress
+	for slot in range(party_size):
+		db.query_with_bindings("INSERT INTO party_progress (slot, level, exp) VALUES (?, ?, ?) ON CONFLICT(slot) DO UPDATE SET level=excluded.level, exp=excluded.exp", [slot, int(party_slot_levels[slot]), int(party_slot_experience[slot])])
+	db.close_db()
 
 func spend_gold(amount: int) -> bool:
 	if amount < 0 or gold < amount:
@@ -466,7 +486,7 @@ func add_party_slot_experience(slot: int, character_index: int, amount: int) -> 
 
 
 func _initialize_party_slot_progress() -> void:
-	for slot in range(PARTY_SIZE):
+	for slot in range(party_size):
 		var character_index := party_characters[slot]
 		party_slot_levels[slot] = int(hero_levels.get(character_index, 1))
 		party_slot_experience[slot] = int(hero_experience.get(character_index, 0))
@@ -499,7 +519,7 @@ func discover_monster(monster_id: String) -> void:
 
 func _normalize_party() -> void:
 	var assigned: Dictionary = {}
-	for slot in range(mini(PARTY_SIZE, party_characters.size())):
+	for slot in range(mini(party_size, party_characters.size())):
 		var character_index := clampi(party_characters[slot], 0, CHARACTERS.size() - 1)
 		if assigned.has(character_index):
 			for candidate in range(CHARACTERS.size()):

@@ -145,7 +145,7 @@ func _update_movement_intent(delta: float) -> void:
 		else minf(1.15, attack_range * 0.78)
 	)
 	var angle := (
-		TAU * float(player.formation_slot) / float(GameData.PARTY_SIZE)
+		TAU * float(player.formation_slot) / float(GameData.party_size)
 		+ float(_slot_offset) * PI / 4.0
 	)
 	var radial := Vector3(cos(angle), 0.0, sin(angle))

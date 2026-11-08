@@ -571,7 +571,7 @@ func _spawn_player() -> void:
 
 	# AI 동료 캐릭터 출전 (주인공 포함 6명 파티)
 	var companion_angles: Array[float] = [2.094, 4.189, -1.047, 1.047, 1.571, -1.571]
-	for i in range(GameData.PARTY_SIZE - 1):
+	for i in range(GameData.party_size - 1):
 		var companion_index := GameData.party_characters[i + 1]
 		if i == 0:
 			companion_character_index = companion_index

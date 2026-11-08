@@ -171,13 +171,13 @@ func _build_character_select() -> void:
 		"슬롯을 선택한 뒤 아래 영웅을 지정하세요. 같은 영웅은 중복 편성할 수 없습니다."
 	)
 	var party_grid := GridContainer.new()
-	party_grid.columns = 2
+	party_grid.columns = 6
 	party_grid.add_theme_constant_override("h_separation", 8)
 	party_grid.add_theme_constant_override("v_separation", 8)
 	page_body.add_child(party_grid)
 	var total_power := 0
 	var composition: Dictionary = {}
-	for slot_index in range(GameData.PARTY_SIZE):
+	for slot_index in range(GameData.party_size):
 		var character_index := GameData.party_characters[slot_index]
 		var character: Dictionary = GameData.CHARACTERS[character_index]
 		total_power += _character_power(character_index)
@@ -185,10 +185,11 @@ func _build_character_select() -> void:
 		composition[role] = int(composition.get(role, 0)) + 1
 		var slot_card := _panel_in(party_grid)
 		slot_card.custom_minimum_size = Vector2(0, 130)
-		var row := HBoxContainer.new()
+		var row := VBoxContainer.new()
 		row.add_theme_constant_override("separation", 6)
 		slot_card.add_child(row)
 		row.add_child(_hero_portrait(character_index, 72))
+		row.add_child(_label("슬롯 %d" % (slot_index + 1), 14, INK, HORIZONTAL_ALIGNMENT_CENTER))
 		var slot_info := VBoxContainer.new()
 		slot_info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(slot_info)

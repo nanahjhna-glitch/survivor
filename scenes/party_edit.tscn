@@ -1,0 +1,49 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/party_edit_screen.gd" id="1_script"]
+
+[node name="PartyEditScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="MainLayout" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="SlotSection" type="MarginContainer" parent="MainLayout"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Grid" type="GridContainer" parent="MainLayout/SlotSection"]
+layout_mode = 2
+columns = 6
+
+[node name="BottomPanel" type="VBoxContainer" parent="MainLayout"]
+layout_mode = 2
+
+[node name="Scroll" type="ScrollContainer" parent="MainLayout/BottomPanel"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="CharList" type="HBoxContainer" parent="MainLayout/BottomPanel/Scroll"]
+layout_mode = 2
+
+[node name="Buttons" type="HBoxContainer" parent="MainLayout/BottomPanel"]
+layout_mode = 2
+
+[node name="CancelBtn" type="Button" parent="MainLayout/BottomPanel/Buttons"]
+layout_mode = 2
+text = "취소"
+
+[node name="ConfirmBtn" type="Button" parent="MainLayout/BottomPanel/Buttons"]
+layout_mode = 2
+text = "확인"
