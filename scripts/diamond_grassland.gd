@@ -277,23 +277,16 @@ func _build_field() -> void:
 	var floor_body := StaticBody3D.new()
 	floor_body.name = "GrasslandGround"
 	floor_body.position.y = -0.3
-	var tile_size := 1.0
-	var half := 12
-	for x in range(-half, half + 1):
-		for z in range(-half, half + 1):
-			var tile := MeshInstance3D.new()
-			var box := BoxMesh.new()
-			box.size = Vector3(tile_size, 0.12, tile_size)
-			tile.mesh = box
-			tile.position = Vector3(x * tile_size + 0.5, random.randf_range(-0.08, 0.08), z * tile_size + 0.5)
-			var mat := StandardMaterial3D.new()
-			if (x + z) % 2 == 0:
-				mat.albedo_color = Color("#8fd16a")
-			else:
-				mat.albedo_color = Color("#4f9a3c")
-			mat.roughness = 1.0
-			tile.material_override = mat
-			add_child(tile)
+	var plane := MeshInstance3D.new()
+	var plane_mesh := PlaneMesh.new()
+	plane_mesh.size = Vector2(25.0, 25.0)
+	plane.mesh = plane_mesh
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = load("res://assets/field/Grass 8x8/grass01.png")
+	mat.roughness = 1.0
+	plane.material_override = mat
+	plane.position = Vector3(0, -0.3, 0)
+	add_child(plane)
 	var floor_collider := CollisionShape3D.new()
 	var box_shape := BoxShape3D.new()
 	box_shape.size = Vector3(25.0, 0.2, 25.0)
@@ -596,8 +589,10 @@ func _spawn_player() -> void:
 		add_child(companion)
 		companions.append(companion)
 
-	var saved_target := _party_member_at_slot(GameData.camera_target_slot)
-	camera_target = saved_target if is_instance_valid(saved_target) and not saved_target.dead else player
+	camera_target = null
+	camera_distance = 40.0
+	camera_pitch = -0.6
+	camera_yaw = 0.785
 	_update_camera(1.0)
 
 
@@ -1099,7 +1094,10 @@ func _auto_cast_for(actor: FieldPlayer) -> void:
 
 
 func _actor_skill_indices(actor: FieldPlayer) -> Array:
-	return CombatData.CHARACTER_SKILL_SETS.get(actor.character_index, [])
+	return GameData.hero_equipped_skills.get(
+		actor.character_index,
+		CombatData.CHARACTER_SKILL_SETS.get(actor.character_index, [])
+	)
 
 
 func _actor_has_skill(actor: FieldPlayer, index: int) -> bool:
@@ -1273,6 +1271,7 @@ func _show_hitbox(mesh: Mesh, at: Vector3, yaw: float, color: Color) -> void:
 func monster_defeated(at: Vector3, data: Dictionary, defeated_monster: FieldMonster) -> void:
 	total_kills += 1
 	alive_monsters.erase(defeated_monster)
+	GameData.discover_monster(str(data.get("id", "")))
 	# 경험치를 파티원 전원에게 동일하게 지급 (분할 없음)
 	var exp_amount := int(data["exp"])
 	GameData.run_experience_reward += exp_amount

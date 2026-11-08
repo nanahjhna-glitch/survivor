@@ -579,7 +579,10 @@ func gain_experience(amount: int) -> void:
 		level += 1
 		next_level_experience = CombatData.XP_PER_LEVEL + (level - 1) * CombatData.XP_PER_LEVEL_STEP
 		var unlocked_skill := 0
-		for skill_index in CombatData.CHARACTER_SKILL_SETS.get(character_index, []):
+		var equipped_skills: Array = GameData.hero_equipped_skills.get(
+			character_index, CombatData.CHARACTER_SKILL_SETS.get(character_index, [])
+		)
+		for skill_index in equipped_skills:
 			var skill: Dictionary = CombatData.SKILLS[skill_index]
 			if int(skill["unlock_level"]) == level:
 				unlocked_skill = int(skill["id"])

@@ -154,6 +154,21 @@ const CHARACTERS := [
 		"stats": [60, 85, 65],
 		"attack_style": "ranged",
 		"attributes": {"STR": 3, "AGI": 5, "VIT": 3, "INT": 2, "DEX": 5, "LUK": 3},
+		"visual":
+		{
+			"scene": "res://assets/characters/char02/Model/char02.fbx",
+			"scale": 1.0,
+			"forward_rotation_degrees": 8.0,
+			"vertical_offset": 0.0,
+			"animations":
+			{
+				"idle":
+				{
+					"scene": "res://assets/characters/char02/Animations/Fighting Idle.fbx",
+					"clip": "mixamo",
+				},
+			},
+		},
 		"color": Color("#61b778"),
 	},
 	{
@@ -164,7 +179,72 @@ const CHARACTERS := [
 		"stats": [55, 70, 90],
 		"attack_style": "magic",
 		"attributes": {"STR": 2, "AGI": 3, "VIT": 3, "INT": 5, "DEX": 4, "LUK": 4},
+		"visual":
+		{
+			"scene": "res://assets/characters/char01/Model/char01.fbx",
+			"scale": 1.0,
+			"forward_rotation_degrees": -8.0,
+			"vertical_offset": -0.9,
+			"animations":
+			{
+				"idle":
+				{
+					"scene": "res://assets/characters/char01/Animations/Fighting Idle.fbx",
+					"clip": "mixamo_com",
+				},
+			},
+		},
 		"color": Color("#9b7ce0"),
+	},
+	{
+		"name": "룬 수호자",
+		"title": "견고한 방패 전사",
+		"weapon": "룬 각인 방패",
+		"passive": "물리 방어력 +10%",
+		"stats": [65, 50, 95],
+		"attack_style": "melee",
+		"attributes": {"STR": 4, "AGI": 2, "VIT": 6, "INT": 2, "DEX": 2, "LUK": 2},
+		"visual":
+		{
+			"scene": "res://assets/characters/char01/Model/char01.fbx",
+			"scale": 1.0,
+			"forward_rotation_degrees": 0.0,
+			"vertical_offset": -0.9,
+			"animations":
+			{
+				"idle":
+				{
+					"scene": "res://assets/characters/char01/Animations/Fighting Idle.fbx",
+					"clip": "mixamo_com",
+				},
+			},
+		},
+		"color": Color("#d0a94f"),
+	},
+	{
+		"name": "황혼 치유사",
+		"title": "빛을 다루는 지원가",
+		"weapon": "황혼의 성서",
+		"passive": "회복 효과 +10%",
+		"stats": [50, 65, 75],
+		"attack_style": "magic",
+		"attributes": {"STR": 1, "AGI": 3, "VIT": 4, "INT": 6, "DEX": 3, "LUK": 3},
+		"visual":
+		{
+			"scene": "res://assets/characters/char02/Model/char02.fbx",
+			"scale": 1.0,
+			"forward_rotation_degrees": 0.0,
+			"vertical_offset": 0.0,
+			"animations":
+			{
+				"idle":
+				{
+					"scene": "res://assets/characters/char02/Animations/Fighting Idle.fbx",
+					"clip": "mixamo",
+				},
+			},
+		},
+		"color": Color("#d77f9b"),
 	},
 ]
 
@@ -185,7 +265,7 @@ var gold := 500
 var gems := 25
 var selected_character := 0
 var selected_detail_character := 0
-var party_characters: Array[int] = [0, 1, 2, 3, 0, 1]
+var party_characters: Array[int] = [0, 1, 2, 3, 4, 5]
 var camera_target_slot := 0
 var selected_party_slot := 0
 var selected_stage := 0
@@ -210,6 +290,11 @@ var run_level := 1
 var run_upgrades: Dictionary = {"power": 0, "vitality": 0, "fortune": 0}
 var hero_levels: Dictionary = {}
 var hero_experience: Dictionary = {}
+var hero_ranks: Dictionary = {}
+var hero_equipment: Dictionary = {}
+var hero_equipped_skills: Dictionary = {}
+var codex_monsters: Array[String] = ["slime"]
+var codex_reward_claimed: Dictionary = {}
 var party_slot_levels: Array[int] = [1, 1, 1, 1, 1, 1]
 var party_slot_experience: Array[int] = [0, 0, 0, 0, 0, 0]
 var party_slot_progress_loaded := false
@@ -222,6 +307,12 @@ func _ready() -> void:
 			hero_levels[i] = 1
 		if not hero_experience.has(i):
 			hero_experience[i] = 0
+		if not hero_ranks.has(i):
+			hero_ranks[i] = 0
+		if not hero_equipment.has(i):
+			hero_equipment[i] = CHARACTERS[i]["weapon"]
+		if not hero_equipped_skills.has(i):
+			hero_equipped_skills[i] = CombatData.CHARACTER_SKILL_SETS.get(i, []).duplicate()
 	if not party_slot_progress_loaded:
 		_initialize_party_slot_progress()
 
@@ -243,6 +334,7 @@ func load_game() -> void:
 			party_characters[i] = clampi(int(saved_party[i]), 0, CHARACTERS.size() - 1)
 	if not party_characters.is_empty():
 		party_characters[0] = selected_character
+	_normalize_party()
 	camera_target_slot = clampi(
 		int(config.get_value("profile", "camera_target_slot", 0)), 0, PARTY_SIZE - 1
 	)
@@ -264,6 +356,24 @@ func load_game() -> void:
 	for i in range(CHARACTERS.size()):
 		hero_levels[i] = maxi(1, int(config.get_value("hero", "level_%d" % i, 1)))
 		hero_experience[i] = maxi(0, int(config.get_value("hero", "exp_%d" % i, 0)))
+		hero_ranks[i] = clampi(int(config.get_value("hero", "rank_%d" % i, 0)), 0, 5)
+		hero_equipment[i] = str(
+			config.get_value("hero", "equipment_%d" % i, CHARACTERS[i]["weapon"])
+		)
+		var skills_key := "skills_%d" % i
+		var saved_skills: Variant = config.get_value("hero", skills_key, [])
+		if config.has_section_key("hero", skills_key) and saved_skills is Array:
+			hero_equipped_skills[i] = saved_skills.duplicate()
+		else:
+			hero_equipped_skills[i] = CombatData.CHARACTER_SKILL_SETS.get(i, []).duplicate()
+	var saved_codex: Variant = config.get_value("collection", "monsters", ["slime"])
+	if saved_codex is Array:
+		codex_monsters.clear()
+		for monster_id in saved_codex:
+			if not codex_monsters.has(str(monster_id)):
+				codex_monsters.append(str(monster_id))
+	var saved_rewards: Variant = config.get_value("collection", "rewards", {})
+	codex_reward_claimed = saved_rewards.duplicate() if saved_rewards is Dictionary else {}
 	_initialize_party_slot_progress()
 	for slot in range(PARTY_SIZE):
 		var level_key := "level_%d" % slot
@@ -297,6 +407,11 @@ func save_game() -> void:
 	for i in range(CHARACTERS.size()):
 		config.set_value("hero", "level_%d" % i, int(hero_levels.get(i, 1)))
 		config.set_value("hero", "exp_%d" % i, int(hero_experience.get(i, 0)))
+		config.set_value("hero", "rank_%d" % i, int(hero_ranks.get(i, 0)))
+		config.set_value("hero", "equipment_%d" % i, str(hero_equipment.get(i, CHARACTERS[i]["weapon"])))
+		config.set_value("hero", "skills_%d" % i, hero_equipped_skills.get(i, []))
+	config.set_value("collection", "monsters", codex_monsters)
+	config.set_value("collection", "rewards", codex_reward_claimed)
 	for slot in range(PARTY_SIZE):
 		config.set_value("party_progress", "level_%d" % slot, party_slot_levels[slot])
 		config.set_value("party_progress", "exp_%d" % slot, party_slot_experience[slot])
@@ -367,9 +482,32 @@ func set_party_slot_character(slot: int, character_index: int) -> void:
 		return
 	if party_characters[slot] == character_index:
 		return
+	for other_slot in range(party_characters.size()):
+		if other_slot != slot and party_characters[other_slot] == character_index:
+			return
 	party_characters[slot] = character_index
 	party_slot_levels[slot] = int(hero_levels.get(character_index, 1))
 	party_slot_experience[slot] = int(hero_experience.get(character_index, 0))
+
+
+func discover_monster(monster_id: String) -> void:
+	if monster_id.is_empty() or codex_monsters.has(monster_id):
+		return
+	codex_monsters.append(monster_id)
+	save_game()
+
+
+func _normalize_party() -> void:
+	var assigned: Dictionary = {}
+	for slot in range(mini(PARTY_SIZE, party_characters.size())):
+		var character_index := clampi(party_characters[slot], 0, CHARACTERS.size() - 1)
+		if assigned.has(character_index):
+			for candidate in range(CHARACTERS.size()):
+				if not assigned.has(candidate):
+					character_index = candidate
+					break
+		party_characters[slot] = character_index
+		assigned[character_index] = true
 
 
 func begin_run() -> void:

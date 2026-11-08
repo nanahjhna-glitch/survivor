@@ -53,6 +53,8 @@ const CHARACTER_SKILL_SETS := {
 	1: [0, 1, 2],
 	2: [0, 1, 3],
 	3: [1, 2, 3],
+	4: [0, 2],
+	5: [1, 3],
 }
 
 const AUTO_SKILL_RULES := {
