@@ -1,4 +1,4 @@
-extends Node
+﻿extends Node
 
 var party_size: int = CHARACTERS.size()
 const SAVE_PATH := "user://survivor_save.cfg"
@@ -6,10 +6,10 @@ const DB_PATH := "user://survivor_save.db"
 
 const CHARACTERS := [
 	{
-		"name": "견습 기사",
-		"title": "균형 잡힌 모험가",
-		"weapon": "낡은 장검",
-		"passive": "최대 체력 +10%",
+		"name": "寃ъ뒿 湲곗궗",
+		"title": "洹좏삎 ?≫엺 紐⑦뿕媛",
+		"weapon": "?≪? ?κ?",
+		"passive": "理쒕? 泥대젰 +10%",
 		"stats": [80, 60, 55],
 		"attack_style": "melee",
 		"attributes": {"STR": 5, "AGI": 3, "VIT": 5, "INT": 1, "DEX": 2, "LUK": 2},
@@ -79,7 +79,7 @@ const CHARACTERS := [
 	{
 		"name": "무도가",
 		"title": "빠르고 강력한 격투가",
-		"weapon": "강철 건틀릿",
+		"weapon": "강철 건틀렛",
 		"passive": "공격 속도 +10%",
 		"stats": [70, 80, 60],
 		"attack_style": "melee",
@@ -147,16 +147,87 @@ const CHARACTERS := [
 		},
 		"color": Color("#e89b59"),
 	},
+	{
+		"name": "검수",
+		"title": "거대한 검수",
+		"weapon": "대검",
+		"passive": "공격력 +10%",
+		"stats": [60, 70, 50],
+		"attack_style": "melee",
+		"attributes": {"STR": 3, "AGI": 4, "VIT": 3, "INT": 2, "DEX": 5, "LUK": 3},
+		"visual":
+		{
+			"scene": "res://assets/characters/char03/Model/char03.fbx",
+			"scale": 1.0,
+			"forward_rotation_degrees": 0.0,
+			"vertical_offset": -0.4,
+			"texture": "res://assets/characters/char03/Model/char03_texture.png",
+			"animations":
+			{
+				"walk":
+				{
+					"scene": "res://assets/characters/char03/Animations/Sword And Shield Walk.fbx",
+					"clip": "mixamo_com",
+				},
+				"idle":
+				{
+					"scene": "res://assets/characters/char03/Animations/Sword And Shield Idle.fbx",
+					"clip": "mixamo_com",
+				},
+				"run":
+				{
+					"scene": "res://assets/characters/char03/Animations/Sword And Shield Run.fbx",
+					"clip": "mixamo_com",
+				},
+				"hit":
+				{
+					"scene": "res://assets/characters/char03/Animations/Sword And Shield Death.fbx",
+					"clip": "mixamo_com",
+				},
+				"death":
+				{
+					"scene": "res://assets/characters/char03/Animations/Sword And Shield Death.fbx",
+					"clip": "mixamo_com",
+				},
+				"attack":
+				{
+					"scene": "res://assets/characters/char03/Animations/Sword And Shield Slash.fbx",
+					"clip": "mixamo_com",
+				},
+				"skill_1":
+				{
+					"scene": "res://assets/characters/char03/Animations/Great Sword Jump Attack.fbx",
+					"clip": "mixamo_com",
+				},
+				"skill_2":
+				{
+					"scene": "res://assets/characters/char03/Animations/Stable Sword Outward Slash.fbx",
+					"clip": "mixamo_com",
+				},
+				"skill_3":
+				{
+					"scene": "res://assets/characters/char03/Animations/Sword And Shield Slash.fbx",
+					"clip": "mixamo_com",
+				},
+				"skill_4":
+				{
+					"scene": "res://assets/characters/char03/Animations/Great Sword Jump Attack.fbx",
+					"clip": "mixamo_com",
+				},
+			},
+		},
+		"color": Color("#8bc34a"),
+	},
 ]
 
 const STAGES := [
 	{
-		"name": "다이아몬드 초원",
-		"subtitle": "수정의 빛이 깃든 첫 모험지",
-		"difficulty": "쉬움",
+		"name": "?ㅼ씠?꾨が??珥덉썝",
+		"subtitle": "?섏젙??鍮쏆씠 源껊뱺 泥?紐⑦뿕吏",
+		"difficulty": "?ъ?",
 		"level": 1,
-		"monsters": "슬라임 · 고블린 · 들개 · 수정 골렘",
-		"reward": "경험치 · 골드 · HP 포션",
+		"monsters": "?щ씪??쨌 怨좊툝由?쨌 ?ㅺ컻 쨌 ?섏젙 怨⑤젞",
+		"reward": "寃쏀뿕移?쨌 怨⑤뱶 쨌 HP ?ъ뀡",
 		"color": Color("#91c878"),
 	},
 ]
@@ -166,7 +237,7 @@ var gold := 500
 var gems := 25
 var selected_character := 0
 var selected_detail_character := 0
-var party_characters: Array[int] = [0, 1]
+var party_characters: Array[int] = [0, 1, 2]
 var camera_target_slot := 0
 var selected_party_slot := 0
 var selected_stage := 0
@@ -196,8 +267,8 @@ var hero_equipment: Dictionary = {}
 var hero_equipped_skills: Dictionary = {}
 var codex_monsters: Array[String] = ["slime"]
 var codex_reward_claimed: Dictionary = {}
-var party_slot_levels: Array[int] = [1, 1]
-var party_slot_experience: Array[int] = [0, 0]
+var party_slot_levels: Array[int] = [1, 1, 1]
+var party_slot_experience: Array[int] = [0, 0, 0]
 var party_slot_progress_loaded := false
 
 
