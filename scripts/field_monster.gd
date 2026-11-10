@@ -23,6 +23,7 @@ var health_bar_timer := 0.0
 var last_position := Vector3.ZERO
 var dead := false
 var body_mesh: MeshInstance3D
+var model_root: Node3D
 var health_bar: Label3D
 var collision_shape: CollisionShape3D
 
@@ -61,12 +62,15 @@ func _build_visuals() -> void:
 			var model := packed.instantiate() as Node3D
 			if model != null:
 				model.name = "MonsterModel"
-				model.scale = Vector3.ONE * size
+				model.scale = Vector3.ONE * size * 10.0
 				add_child(model)
+				model_root = model
 				body_mesh = model as MeshInstance3D
 				if body_mesh == null:
-					# 모델 루트가 MeshInstance가 아니면 첫 MeshInstance를 body_mesh로 사용
 					body_mesh = _find_mesh_instance(model)
+				if body_mesh == null:
+					body_mesh = null
+					push_warning("몬스터 모델에서 MeshInstance3D를 찾지 못했습니다.")
 				health_bar = Label3D.new()
 				health_bar.position.y = size * 1.35
 				health_bar.font_size = 24
@@ -134,9 +138,13 @@ func apply_damage(amount: float) -> void:
 		collision_shape.set_deferred("disabled", true)
 		health_bar.hide()
 		arena.call("monster_defeated", global_position, monster_data, self)
-		var death_tween := create_tween()
-		death_tween.tween_property(body_mesh, "scale", Vector3.ZERO, 0.22)
-		death_tween.tween_callback(queue_free)
+		var target_node: Node3D = body_mesh if body_mesh != null else model_root
+		if target_node != null:
+			var death_tween := create_tween()
+			death_tween.tween_property(target_node, "scale", Vector3.ZERO, 0.22)
+			death_tween.tween_callback(queue_free)
+		else:
+			queue_free()
 
 
 func _update_health_bar() -> void:
