@@ -16,11 +16,21 @@ var status_label: Label
 var collection_filter := "영웅"
 var hero_detail_tab := "정보"
 var growth_tab := "레벨업"
+var character_preview_container: SubViewportContainer
+var character_preview_camera: Camera3D
+var character_preview_builder: FieldPlayer
+var character_preview_focus := Vector3.ZERO
+var character_preview_yaw := PI
+var character_preview_dragging := false
 
 
 func _ready() -> void:
 	_build_shell()
 	_build_page()
+
+
+func _exit_tree() -> void:
+	_clear_character_preview()
 
 
 func _build_shell() -> void:
@@ -170,6 +180,7 @@ func _build_character_select() -> void:
 		"6인 파티 편성",
 		"슬롯을 선택한 뒤 아래 영웅을 지정하세요. 같은 영웅은 중복 편성할 수 없습니다."
 	)
+	_build_character_preview(GameData.party_characters[GameData.selected_party_slot])
 	var party_grid := GridContainer.new()
 	party_grid.columns = 6
 	party_grid.add_theme_constant_override("h_separation", 8)
@@ -433,7 +444,9 @@ func _build_growth() -> void:
 			)
 			var cost := 100 + level * 75
 			_add_text_card("소모 재료", "골드 %d · 영웅 경험치 %d / %d" % [
-				cost, GameData.hero_experience.get(index, 0), 100 + level * 50
+				cost,
+				GameData.hero_experience.get(index, 0),
+				CombatData.experience_required_for_level(level)
 			])
 			_add_action("레벨업 · 골드 %d" % cost, _upgrade_hero_level, true)
 		"승급":
@@ -554,7 +567,7 @@ func _build_hero_detail() -> void:
 		]
 	)
 	var experience := int(GameData.hero_experience.get(index, 0))
-	var required_experience := 100 + level * 50
+	var required_experience := CombatData.experience_required_for_level(level)
 	var experience_panel := _panel()
 	var experience_column := _column_in(experience_panel)
 	experience_column.add_child(
@@ -1128,11 +1141,156 @@ func _set_growth_tab(tab_name: String) -> void:
 
 
 func _refresh_current_page() -> void:
+	_clear_character_preview()
 	for child in page_body.get_children():
 		child.queue_free()
 	for child in action_bar.get_children():
 		child.queue_free()
 	_build_page()
+
+
+func _build_character_preview(character_index: int) -> void:
+	var character: Dictionary = GameData.CHARACTERS[character_index]
+	var preview_panel := _panel()
+	var preview_column := _column_in(preview_panel)
+	character_preview_container = SubViewportContainer.new()
+	character_preview_container.custom_minimum_size = Vector2(0, 270)
+	character_preview_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	character_preview_container.stretch = true
+	character_preview_container.mouse_filter = Control.MOUSE_FILTER_STOP
+	character_preview_container.gui_input.connect(_on_character_preview_gui_input)
+	preview_column.add_child(character_preview_container)
+
+	var viewport := SubViewport.new()
+	viewport.size = Vector2i(640, 360)
+	viewport.own_world_3d = true
+	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	character_preview_container.add_child(viewport)
+
+	var environment_node := WorldEnvironment.new()
+	var environment := Environment.new()
+	environment.background_mode = Environment.BG_COLOR
+	environment.background_color = Color("#dce4e7")
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color("#fff2dc")
+	environment.ambient_light_energy = 0.8
+	environment_node.environment = environment
+	viewport.add_child(environment_node)
+
+	var key_light := DirectionalLight3D.new()
+	key_light.rotation_degrees = Vector3(-35.0, -25.0, 0.0)
+	key_light.light_energy = 1.4
+	viewport.add_child(key_light)
+	var fill_light := DirectionalLight3D.new()
+	fill_light.rotation_degrees = Vector3(-15.0, 145.0, 0.0)
+	fill_light.light_energy = 0.65
+	viewport.add_child(fill_light)
+
+	character_preview_camera = Camera3D.new()
+	character_preview_camera.current = true
+	character_preview_camera.fov = 42.0
+	viewport.add_child(character_preview_camera)
+
+	character_preview_builder = FieldPlayer.new()
+	character_preview_builder.visual_root = Node3D.new()
+	character_preview_builder.visual_root.name = "CharacterPreview"
+	if not character_preview_builder._build_model_visual(character):
+		push_error("캐릭터 미리보기 모델을 만들지 못했습니다: %s" % character["name"])
+		character_preview_builder.visual_root.free()
+		character_preview_builder.free()
+		character_preview_builder = null
+		preview_column.add_child(_label("캐릭터 미리보기를 불러오지 못했습니다.", 14, MUTED))
+		return
+	viewport.add_child(character_preview_builder.visual_root)
+	character_preview_builder.play_character_animation("idle")
+
+	character_preview_focus = _character_preview_focus_point(
+		character_preview_builder.visual_root
+	)
+	character_preview_yaw = PI + 0.18
+	_update_character_preview_camera()
+	preview_column.add_child(_label("드래그하여 캐릭터를 360° 회전", 13, MUTED))
+
+
+func _character_preview_focus_point(root: Node3D) -> Vector3:
+	var bounds_min := Vector3.ZERO
+	var bounds_max := Vector3.ZERO
+	var has_bounds := false
+	for node in root.find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := node as MeshInstance3D
+		var ancestor := mesh_instance.get_parent()
+		var is_weapon := false
+		while ancestor != null and ancestor != root:
+			if ancestor.name == "WeaponSocket":
+				is_weapon = true
+				break
+			ancestor = ancestor.get_parent()
+		if is_weapon:
+			continue
+		var bounds := mesh_instance.get_aabb()
+		for corner_index in range(8):
+			var corner := bounds.position + Vector3(
+				bounds.size.x if (corner_index & 1) != 0 else 0.0,
+				bounds.size.y if (corner_index & 2) != 0 else 0.0,
+				bounds.size.z if (corner_index & 4) != 0 else 0.0
+			)
+			var point := mesh_instance.to_global(corner)
+			if not has_bounds:
+				bounds_min = point
+				bounds_max = point
+				has_bounds = true
+			else:
+				bounds_min = bounds_min.min(point)
+				bounds_max = bounds_max.max(point)
+	if not has_bounds:
+		return root.global_position + Vector3.UP * 1.3
+	return Vector3(
+		(bounds_min.x + bounds_max.x) * 0.5,
+		lerpf(bounds_min.y, bounds_max.y, 0.74),
+		(bounds_min.z + bounds_max.z) * 0.5
+	)
+
+
+func _update_character_preview_camera() -> void:
+	if not is_instance_valid(character_preview_camera):
+		return
+	var camera_offset := Vector3(
+		sin(character_preview_yaw) * 2.5,
+		0.16,
+		cos(character_preview_yaw) * 2.5
+	)
+	character_preview_camera.global_position = character_preview_focus + camera_offset
+	character_preview_camera.look_at(character_preview_focus, Vector3.UP)
+
+
+func _on_character_preview_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		character_preview_dragging = event.pressed
+		character_preview_container.accept_event()
+	elif event is InputEventMouseMotion and character_preview_dragging:
+		character_preview_yaw = wrapf(
+			character_preview_yaw - event.relative.x * 0.01, 0.0, TAU
+		)
+		_update_character_preview_camera()
+		character_preview_container.accept_event()
+	elif event is InputEventScreenTouch:
+		character_preview_dragging = event.pressed
+		character_preview_container.accept_event()
+	elif event is InputEventScreenDrag:
+		character_preview_yaw = wrapf(
+			character_preview_yaw - event.relative.x * 0.01, 0.0, TAU
+		)
+		_update_character_preview_camera()
+		character_preview_container.accept_event()
+
+
+func _clear_character_preview() -> void:
+	if is_instance_valid(character_preview_builder):
+		character_preview_builder.free()
+	character_preview_builder = null
+	character_preview_container = null
+	character_preview_camera = null
+	character_preview_dragging = false
 
 
 func _select_party_slot(slot_index: int) -> void:
@@ -1204,6 +1362,7 @@ func _upgrade_hero_level() -> void:
 		_show_status("골드가 부족해요.")
 		return
 	GameData.hero_levels[index] = level + 1
+	GameData.synchronize_party_progress()
 	GameData.save_game()
 	_refresh_current_page()
 
@@ -1298,7 +1457,6 @@ func _choose_level_up(key: String) -> void:
 		push_error("등록되지 않은 강화 항목입니다: %s" % key)
 		return
 	GameData.run_upgrades[key] += 1
-	GameData.run_level += 1
 	_go("battle")
 
 

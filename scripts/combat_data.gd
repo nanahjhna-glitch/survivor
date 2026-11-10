@@ -5,6 +5,7 @@ const FIELD_NAME := "다이아몬드 초원"
 const XP_PER_LEVEL := 30
 const XP_PER_LEVEL_STEP := 18
 
+
 const SKILLS := [
 	{
 		"id": 1,
@@ -69,7 +70,6 @@ const DROP_RULES := {
 	"experience_magnet_range": 2.2,
 	"experience_magnet_speed": 8.0,
 }
-
 const LEVEL_UP_CARDS := [
 	{
 		"id": "power",
@@ -166,3 +166,7 @@ const MONSTERS := [
 		"size": 1.25,
 	},
 ]
+
+
+static func experience_required_for_level(level: int) -> int:
+	return XP_PER_LEVEL + maxi(0, level - 1) * XP_PER_LEVEL_STEP

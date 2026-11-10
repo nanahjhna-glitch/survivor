@@ -81,10 +81,17 @@ var regen_timer := 0.0
 var random := RandomNumberGenerator.new()
 
 
-func setup(game: Node3D, character: Dictionary) -> void:
+func setup(
+	game: Node3D, character: Dictionary, starting_level: int = 1, starting_experience: int = 0
+) -> void:
 	arena = game
-	level = 1
-	next_level_experience = CombatData.XP_PER_LEVEL
+	level = maxi(1, starting_level)
+	experience = maxi(0, starting_experience)
+	next_level_experience = CombatData.experience_required_for_level(level)
+	while experience >= next_level_experience:
+		experience -= next_level_experience
+		level += 1
+		next_level_experience = CombatData.experience_required_for_level(level)
 	attributes = character.get("attributes", {}).duplicate()
 	for key in GameData.permanent_stats:
 		attributes[key] = int(attributes.get(key, 1)) + int(GameData.permanent_stats[key])
@@ -704,7 +711,7 @@ func gain_experience(amount: int) -> void:
 	while experience >= next_level_experience:
 		experience -= next_level_experience
 		level += 1
-		next_level_experience = CombatData.XP_PER_LEVEL + (level - 1) * CombatData.XP_PER_LEVEL_STEP
+		next_level_experience = CombatData.experience_required_for_level(level)
 		var unlocked_skill := 0
 		var equipped_skills: Array = GameData.hero_equipped_skills.get(
 			character_index, CombatData.CHARACTER_SKILL_SETS.get(character_index, [])

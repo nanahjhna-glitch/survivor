@@ -320,6 +320,44 @@ func _ready() -> void:
 			hero_equipped_skills[i] = CombatData.CHARACTER_SKILL_SETS.get(i, []).duplicate()
 	if not party_slot_progress_loaded:
 		_initialize_party_slot_progress()
+	if synchronize_party_progress():
+		save_game()
+
+
+func synchronize_party_progress() -> bool:
+	var changed := false
+	for slot in range(mini(party_size, party_characters.size())):
+		var character_index := party_characters[slot]
+		var hero_level := maxi(1, int(hero_levels.get(character_index, 1)))
+		var slot_level := maxi(1, party_slot_levels[slot])
+		var level := maxi(hero_level, slot_level)
+		var experience := 0
+		if hero_level > slot_level:
+			experience = maxi(0, int(hero_experience.get(character_index, 0)))
+		elif slot_level > hero_level:
+			experience = maxi(0, party_slot_experience[slot])
+		else:
+			experience = maxi(
+				int(hero_experience.get(character_index, 0)),
+				party_slot_experience[slot]
+			)
+		var required_experience := CombatData.experience_required_for_level(level)
+		while experience >= required_experience:
+			experience -= required_experience
+			level += 1
+			required_experience = CombatData.experience_required_for_level(level)
+		if (
+			hero_level != level
+			or int(hero_experience.get(character_index, 0)) != experience
+			or slot_level != level
+			or party_slot_experience[slot] != experience
+		):
+			changed = true
+		hero_levels[character_index] = level
+		hero_experience[character_index] = experience
+		party_slot_levels[slot] = level
+		party_slot_experience[slot] = experience
+	return changed
 
 
 func _open_db() -> SQLite:
@@ -571,11 +609,11 @@ func add_party_slot_experience(slot: int, character_index: int, amount: int) -> 
 		return
 	var current_level := party_slot_levels[slot]
 	var current_experience := party_slot_experience[slot] + amount
-	var required_experience := 100 + current_level * 50
+	var required_experience := CombatData.experience_required_for_level(current_level)
 	while current_experience >= required_experience:
 		current_experience -= required_experience
 		current_level += 1
-		required_experience = 100 + current_level * 50
+		required_experience = CombatData.experience_required_for_level(current_level)
 	party_slot_levels[slot] = current_level
 	party_slot_experience[slot] = current_experience
 

@@ -16,6 +16,11 @@ const SPATIAL_CELL_SIZE := 4.0
 const SPATIAL_REBUILD_INTERVAL := 0.2
 const CAMERA_OFFSET := Vector3(0.0, 16.0, 12.0)
 const CAMERA_LOOK_HEIGHT := 0.5
+const CHARACTER_SKILL_EFFECT_COLORS := [
+	[Color("#ffd166"), Color("#75e8ed"), Color("#ff9a57"), Color("#fff0a0")],
+	[Color("#ffad60"), Color("#61e3d4"), Color("#b28cff"), Color("#ff6f91")],
+	[Color("#b8f26b"), Color("#7bb8ff"), Color("#c79bff"), Color("#fff078")],
+]
 
 enum AutoHuntState { SEARCH, APPROACH, CASTING, RECOVERY, SUSPENDED }
 
@@ -545,23 +550,34 @@ func _box_mesh(at: Vector3, dimensions: Vector3, color: Color) -> MeshInstance3D
 
 
 func _spawn_player() -> void:
+	var player_slot := GameData.party_characters.find(GameData.selected_character)
+	if player_slot < 0:
+		push_error("선택된 캐릭터가 파티에 없습니다.")
+		return
 	player = PlayerScript.new()
 	player.name = "Player"
-	player.setup(self, GameData.CHARACTERS[GameData.selected_character])
-	player.formation_slot = 0
-	player.party_slot = 0
+	player.character_index = GameData.selected_character
+	player.party_slot = player_slot
+	player.setup(
+		self,
+		GameData.CHARACTERS[player.character_index],
+		int(GameData.hero_levels.get(player.character_index, 1)),
+		int(GameData.hero_experience.get(player.character_index, 0))
+	)
+	player.formation_slot = player_slot
 	# 기존 코드
 	# player.position = Vector3.ZERO
 	# 변경 코드 (Y축을 1.0만큼 공중으로 띄움)
 	var start_angles := [2.094, 4.189, -1.571, -1.047, 1.047, 1.571]
-	player.position = Vector3(cos(start_angles[2]) * 8.0, 0.0, sin(start_angles[2]) * 8.0)
-	player.character_index = GameData.selected_character
+	player.position = Vector3(
+		cos(start_angles[player_slot]) * 8.0, 0.0, sin(start_angles[player_slot]) * 8.0
+	)
 	player.health_changed.connect(_on_health_changed)
 	player.experience_changed.connect(_on_experience_changed)
 	player.level_changed.connect(_on_level_changed.bind(player))
 	player.player_died.connect(_on_party_member_died.bind(player))
 	add_child(player)
-	GameData.run_level = player.get("level")
+	GameData.run_level = player.level
 
 	camera = Camera3D.new()
 	camera.name = "FieldCamera"
@@ -571,23 +587,32 @@ func _spawn_player() -> void:
 
 	# AI 동료 캐릭터 출전 (주인공 포함 6명 파티)
 	var companion_angles: Array[float] = [2.094, 4.189, -1.047, 1.047, 1.571, -1.571]
-	for i in range(GameData.party_size - 1):
-		var companion_index := GameData.party_characters[i + 1]
-		if i == 0:
+	var companion_number := 0
+	for slot in range(GameData.party_size):
+		if slot == player_slot:
+			continue
+		var companion_index := GameData.party_characters[slot]
+		if companion_number == 0:
 			companion_character_index = companion_index
 		var companion: FieldPlayer = PlayerScript.new()
-		companion.name = "Companion%d" % i
-		companion.setup(self, GameData.CHARACTERS[companion_index])
+		companion.name = "Companion%d" % companion_number
 		companion.character_index = companion_index
-		companion.formation_slot = i + 1
-		companion.party_slot = i + 1
-		var a: float = companion_angles[i]
+		companion.party_slot = slot
+		companion.setup(
+			self,
+			GameData.CHARACTERS[companion_index],
+			int(GameData.hero_levels.get(companion_index, 1)),
+			int(GameData.hero_experience.get(companion_index, 0))
+		)
+		companion.formation_slot = slot
+		var a: float = companion_angles[slot]
 		companion.position = Vector3(cos(a) * 8.0, 0.0, sin(a) * 8.0)
 		companion.auto_hunt_disabled = false
 		companion.player_died.connect(_on_party_member_died.bind(companion))
 		companion.level_changed.connect(_on_level_changed.bind(companion))
 		add_child(companion)
 		companions.append(companion)
+		companion_number += 1
 
 	camera_target = null
 	camera_distance = 40.0
@@ -664,7 +689,6 @@ func _build_hud() -> void:
 	bottom_panel.add_theme_constant_override("v_separation", 8)
 	root.add_child(bottom_panel)
 	party_hud_panels.clear()
-	var bidx := 0
 	for c in [player] + companions:
 		var panel := PanelContainer.new()
 		panel.custom_minimum_size = Vector2(0, 76)
@@ -693,12 +717,10 @@ func _build_hud() -> void:
 		content.add_theme_constant_override("separation", 4)
 		panel.add_child(content)
 		var name_row := HBoxContainer.new()
-		var character_index: int = (
-			GameData.selected_character if bidx == 0 else GameData.party_characters[bidx]
-		)
+		var character_index := int(c.character_index)
 		var character_name := str(GameData.CHARACTERS[character_index]["name"])
 		var name_lbl := _hud_label(character_name, 12)
-		var level_lbl := _hud_label("Lv.1", 11)
+		var level_lbl := _hud_label("Lv.%d" % c.level, 11)
 		name_row.add_child(name_lbl)
 		var spacer := Control.new()
 		spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -711,6 +733,8 @@ func _build_hud() -> void:
 		var exp := _make_bar(Color("#55c6d1"))
 		exp.custom_minimum_size = Vector2(0, 8)
 		exp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		exp.max_value = c.next_level_experience
+		exp.value = c.experience
 		content.add_child(hp)
 		content.add_child(exp)
 		c.level_changed.connect(func(new_level: int, _u: int) -> void:
@@ -727,8 +751,6 @@ func _build_hud() -> void:
 			exp.max_value = required
 			exp.value = current
 		)
-		bidx += 1
-
 	joystick = JoystickScript.new()
 	joystick.position = Vector2(22, -178)
 	joystick.visible = false
@@ -1004,6 +1026,7 @@ func _execute_skill(actor: FieldPlayer, index: int) -> void:
 	var range_value := float(skill["range"]) * actor.hitbox_size_multiplier
 	var targets := _monsters_in_range(actor.global_position, range_value)
 	var damage_type: String = skill["damage_type"]
+	var effect_origin := actor.global_position + Vector3.UP * 0.55
 	if index == 0:
 		if actor == player:
 			_show_hitbox(
@@ -1015,13 +1038,12 @@ func _execute_skill(actor: FieldPlayer, index: int) -> void:
 		var nearest := _nearest_monster(actor.global_position, range_value)
 		if nearest != null:
 			var impact := nearest.global_position
+			effect_origin = impact + Vector3.UP * 0.55
 			var impact_radius := 2.4 * actor.hitbox_size_multiplier
 			if actor == player:
 				_show_hitbox(_create_hitbox_circle(impact_radius), impact, 0.0, Color("#75e8ed"))
 			for enemy in _monsters_in_range(impact, impact_radius):
 				_deal_skill_damage(actor, enemy, float(skill["damage"]), damage_type)
-			if actor == player:
-				_spawn_hit_effect(impact + Vector3.UP, Color("#75e8ed"), 1.8)
 	elif index == 2:
 		if actor == player:
 			_show_hitbox(
@@ -1029,10 +1051,6 @@ func _execute_skill(actor: FieldPlayer, index: int) -> void:
 			)
 		for enemy in targets:
 			_deal_skill_damage(actor, enemy, float(skill["damage"]), damage_type)
-		if actor == player:
-			_spawn_hit_effect(
-				actor.global_position + Vector3.UP * 0.3, Color("#d4b8ff"), range_value * 0.55
-			)
 	else:
 		if actor == player:
 			_show_hitbox(
@@ -1040,10 +1058,7 @@ func _execute_skill(actor: FieldPlayer, index: int) -> void:
 			)
 		for enemy in targets:
 			_deal_skill_damage(actor, enemy, float(skill["damage"]), damage_type)
-		if actor == player:
-			_spawn_hit_effect(
-				actor.global_position + Vector3.UP, Color("#69e4eb"), range_value * 0.65
-			)
+	_spawn_character_skill_effect(actor, index, effect_origin, range_value)
 	if actor == player:
 		_show_notification("%s!" % skill["name"])
 		_update_skill_button(index)
@@ -1360,6 +1375,86 @@ func _spawn_hit_effect(at: Vector3, color: Color, radius: float) -> void:
 	tween.tween_callback(effect.queue_free)
 
 
+func _spawn_character_skill_effect(
+	actor: FieldPlayer, skill_index: int, at: Vector3, range_value: float
+) -> void:
+	var character_index := clampi(
+		actor.character_index, 0, CHARACTER_SKILL_EFFECT_COLORS.size() - 1
+	)
+	var color: Color = CHARACTER_SKILL_EFFECT_COLORS[character_index][skill_index]
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(color.r, color.g, color.b, 0.85)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.emission_enabled = true
+	material.emission = color
+
+	var effect := Node3D.new()
+	effect.name = "CharacterSkillEffect"
+	add_child(effect)
+	effect.global_position = at
+	effect.global_rotation = Vector3(0.0, actor.global_rotation.y, 0.0)
+	effect.scale = Vector3.ONE * 0.2
+
+	match skill_index:
+		0:
+			var slash := BoxMesh.new()
+			slash.size = Vector3(2.2, 0.1, 0.3)
+			_add_skill_effect_part(
+				effect, slash, material, Vector3.ZERO, Vector3(0.0, 0.0, -0.5)
+			)
+		1:
+			var impact := SphereMesh.new()
+			impact.radius = 0.7
+			impact.height = 1.4
+			_add_skill_effect_part(effect, impact, material, Vector3.ZERO)
+			var impact_ring := CylinderMesh.new()
+			impact_ring.top_radius = 0.8
+			impact_ring.bottom_radius = 0.8
+			impact_ring.height = 0.08
+			_add_skill_effect_part(effect, impact_ring, material, Vector3.DOWN * 0.35)
+		2:
+			var shockwave := CylinderMesh.new()
+			shockwave.top_radius = 0.55
+			shockwave.bottom_radius = 0.55
+			shockwave.height = 0.08
+			_add_skill_effect_part(effect, shockwave, material, Vector3.DOWN * 0.35)
+		3:
+			var burst := SphereMesh.new()
+			burst.radius = 0.75
+			burst.height = 1.5
+			_add_skill_effect_part(effect, burst, material, Vector3.ZERO)
+			var burst_cross := BoxMesh.new()
+			burst_cross.size = Vector3(2.0, 0.12, 0.22)
+			_add_skill_effect_part(
+				effect, burst_cross, material, Vector3.ZERO, Vector3(0.0, 0.0, 0.65)
+			)
+
+	var target_scale := Vector3.ONE
+	if skill_index == 2:
+		var radius_scale := clampf(range_value * 0.42, 1.0, 2.4)
+		target_scale = Vector3(radius_scale, 1.0, radius_scale)
+	var tween := create_tween()
+	tween.tween_property(effect, "scale", target_scale, 0.16)
+	tween.parallel().tween_property(material, "albedo_color:a", 0.0, 0.38)
+	tween.tween_callback(effect.queue_free)
+
+
+func _add_skill_effect_part(
+	effect: Node3D,
+	mesh: Mesh,
+	material: StandardMaterial3D,
+	at: Vector3,
+	rotation: Vector3 = Vector3.ZERO
+) -> void:
+	var part := MeshInstance3D.new()
+	part.mesh = mesh
+	part.material_override = material
+	part.position = at
+	part.rotation = rotation
+	effect.add_child(part)
+
+
 func _on_joystick_changed(direction: Vector2) -> void:
 	if player != null and not paused:
 		player.set_controls(direction, running)
@@ -1389,7 +1484,8 @@ func _on_experience_changed(current: int, required: int) -> void:
 func _on_level_changed(
 	new_level: int, unlocked_skill: int, _member: FieldPlayer = null
 ) -> void:
-	GameData.run_level = new_level
+	if _member == null or _member == player:
+		GameData.run_level = new_level
 	GameAudio.play_sfx("level_up")
 	if unlocked_skill > 0:
 		_show_notification("레벨 업! Lv.%d · 스킬 %d 해금" % [new_level, unlocked_skill], 2.5)
@@ -1419,11 +1515,9 @@ func _on_party_member_died(member: FieldPlayer) -> void:
 
 
 func _party_member_at_slot(slot: int) -> FieldPlayer:
-	if slot == 0:
-		return player
-	var companion_index := slot - 1
-	if companion_index >= 0 and companion_index < companions.size():
-		return companions[companion_index]
+	for member in [player] + companions:
+		if is_instance_valid(member) and member.party_slot == slot:
+			return member
 	return null
 
 
@@ -1440,8 +1534,9 @@ func _select_camera_target(member: FieldPlayer) -> void:
 		var style := panel.get_theme_stylebox("panel").duplicate() as StyleBoxFlat
 		if style == null:
 			continue
+		var panel_member := ([player] + companions)[index] as FieldPlayer
 		style.border_color = (
-			Color("#f0c65b") if index == member.party_slot else Color("#d8c99e")
+			Color("#f0c65b") if panel_member.party_slot == member.party_slot else Color("#d8c99e")
 		)
 		panel.add_theme_stylebox_override("panel", style)
 
@@ -1452,13 +1547,12 @@ func _select_next_camera_target(dead_slot: int) -> void:
 		camera_target = null
 		return
 	for step in range(1, members.size() + 1):
-		var slot := (dead_slot + step) % members.size()
-		var candidate: Variant = members[slot]
+		var slot := (dead_slot + step) % GameData.party_size
+		var candidate := _party_member_at_slot(slot)
 		if not is_instance_valid(candidate):
 			continue
-		var survivor := candidate as FieldPlayer
-		if survivor != null and not survivor.dead:
-			_select_camera_target(survivor)
+		if not candidate.dead:
+			_select_camera_target(candidate)
 			return
 	camera_target = null
 
