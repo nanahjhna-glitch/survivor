@@ -165,6 +165,18 @@ const MONSTERS := [
 		"color": Color("#59c6d1"),
 		"size": 1.25,
 	},
+	{
+		"id": "monster01",
+		"name": "몬스터01",
+		"hp": 60.0,
+		"attack": 8.0,
+		"speed": 2.0,
+		"exp": 20,
+		"gold": 8,
+		"color": Color("#9b7bd3"),
+		"size": 1.0,
+		"scene": "res://assets/monster/monster01/Model/monster01.fbx",
+	},
 ]
 
 

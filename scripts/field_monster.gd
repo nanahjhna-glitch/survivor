@@ -54,6 +54,30 @@ func _ready() -> void:
 
 func _build_visuals() -> void:
 	var size := float(monster_data.get("size", 0.7))
+	var scene_path: String = str(monster_data.get("scene", ""))
+	if not scene_path.is_empty():
+		var packed := load(scene_path) as PackedScene
+		if packed != null:
+			var model := packed.instantiate() as Node3D
+			if model != null:
+				model.name = "MonsterModel"
+				model.scale = Vector3.ONE * size
+				add_child(model)
+				body_mesh = model as MeshInstance3D
+				if body_mesh == null:
+					# 모델 루트가 MeshInstance가 아니면 첫 MeshInstance를 body_mesh로 사용
+					body_mesh = _find_mesh_instance(model)
+				health_bar = Label3D.new()
+				health_bar.position.y = size * 1.35
+				health_bar.font_size = 24
+				health_bar.pixel_size = 0.006
+				health_bar.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+				health_bar.modulate = Color("#fff2df")
+				add_child(health_bar)
+				_update_health_bar()
+				health_bar.hide()
+				return
+	# 기본 박스 비주얼
 	body_mesh = MeshInstance3D.new()
 	var box := BoxMesh.new()
 	box.size = Vector3(size, size, size)
@@ -74,7 +98,25 @@ func _build_visuals() -> void:
 	add_child(health_bar)
 	_update_health_bar()
 	health_bar.hide()
+	health_bar = Label3D.new()
+	health_bar.position.y = size * 1.35
+	health_bar.font_size = 24
+	health_bar.pixel_size = 0.006
+	health_bar.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	health_bar.modulate = Color("#fff2df")
+	add_child(health_bar)
+	_update_health_bar()
+	health_bar.hide()
 
+
+func _find_mesh_instance(root: Node) -> MeshInstance3D:
+	if root is MeshInstance3D:
+		return root as MeshInstance3D
+	for child in root.get_children():
+		var found := _find_mesh_instance(child)
+		if found != null:
+			return found
+	return null
 
 func apply_damage(amount: float) -> void:
 	if dead:
