@@ -2,10 +2,10 @@ class_name FieldMonster
 extends CharacterBody3D
 
 const ATTACK_RANGE := 1.15
-const TARGET_RETHINK_INTERVAL := 0.3
+const TARGET_RETHINK_INTERVAL := 0.6
 const TARGET_LOCK_DURATION := 0.7
 const MONSTER_SEPARATION_RADIUS := 2.0
-const MOVEMENT_RETHINK_INTERVAL := 0.1
+const MOVEMENT_RETHINK_INTERVAL := 0.25
 const MOVE_ACCELERATION := 10.0
 
 var arena: Node3D
@@ -180,6 +180,8 @@ func _load_monster_animations(animation_paths: Dictionary) -> void:
 			continue
 		var animation := source_player.get_animation(source_animation_name).duplicate(true)
 		_strip_monster_root_motion(animation)
+		if animation_kind == "idle":
+			_remove_idle_hip_tilt(animation)
 		if animation_kind == "idle" or animation_kind == "walk":
 			animation.loop_mode = Animation.LOOP_LINEAR
 		else:
@@ -212,6 +214,19 @@ func _strip_monster_root_motion(animation: Animation) -> void:
 		if animation.track_get_type(track_index) != Animation.TYPE_POSITION_3D:
 			continue
 		if not str(animation.track_get_path(track_index)).contains("bone_pose/position"):
+			tracks_to_remove.append(track_index)
+	tracks_to_remove.reverse()
+	for track_index in tracks_to_remove:
+		animation.remove_track(track_index)
+
+
+func _remove_idle_hip_tilt(animation: Animation) -> void:
+	var tracks_to_remove: Array[int] = []
+	for track_index in range(animation.get_track_count()):
+		if animation.track_get_type(track_index) != Animation.TYPE_ROTATION_3D:
+			continue
+		var track_path := str(animation.track_get_path(track_index)).to_lower()
+		if track_path.contains("hips") and not track_path.contains("spine"):
 			tracks_to_remove.append(track_index)
 	tracks_to_remove.reverse()
 	for track_index in tracks_to_remove:
