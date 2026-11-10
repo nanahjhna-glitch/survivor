@@ -25,6 +25,8 @@ var dead := false
 var body_mesh: MeshInstance3D
 var model_root: Node3D
 var animation_player: AnimationPlayer
+var current_animation_kind := ""
+var action_animation_kind := ""
 var health_bar: Label3D
 var collision_shape: CollisionShape3D
 
@@ -77,7 +79,15 @@ func _build_visuals() -> void:
 				if body_mesh == null:
 					body_mesh = _find_mesh_instance(model)
 				animation_player = _find_animation_player(model)
+				var animation_paths: Dictionary = monster_data.get("animations", {})
+				_load_monster_animations(animation_paths)
 				if animation_player != null:
+					if not animation_player.animation_finished.is_connected(
+						_on_monster_animation_finished
+					):
+						animation_player.animation_finished.connect(
+							_on_monster_animation_finished
+						)
 					_play_monster_animation("idle")
 				if body_mesh == null:
 					body_mesh = null
@@ -142,6 +152,72 @@ func _apply_model_texture(root: Node, texture: Texture2D) -> void:
 		_apply_model_texture(child, texture)
 
 
+func _load_monster_animations(animation_paths: Dictionary) -> void:
+	if animation_paths.is_empty():
+		return
+	if animation_player == null:
+		animation_player = AnimationPlayer.new()
+		animation_player.name = "MonsterAnimations"
+		model_root.add_child(animation_player)
+	animation_player.root_node = NodePath("..")
+	var library := AnimationLibrary.new()
+	for animation_kind in animation_paths:
+		var scene_path := str(animation_paths[animation_kind])
+		var packed_scene := load(scene_path) as PackedScene
+		if packed_scene == null:
+			push_error("몬스터 애니메이션을 불러오지 못했습니다: %s" % scene_path)
+			continue
+		var animation_scene := packed_scene.instantiate()
+		var source_player := _find_animation_player(animation_scene)
+		if source_player == null:
+			push_error("애니메이션 파일에 AnimationPlayer가 없습니다: %s" % scene_path)
+			animation_scene.free()
+			continue
+		var source_animation_name := _select_monster_source_animation(source_player)
+		if source_animation_name.is_empty():
+			push_error("재생 가능한 몬스터 애니메이션이 없습니다: %s" % scene_path)
+			animation_scene.free()
+			continue
+		var animation := source_player.get_animation(source_animation_name).duplicate(true)
+		_strip_monster_root_motion(animation)
+		if animation_kind == "idle" or animation_kind == "walk":
+			animation.loop_mode = Animation.LOOP_LINEAR
+		else:
+			animation.loop_mode = Animation.LOOP_NONE
+		var error := library.add_animation(str(animation_kind), animation)
+		if error != OK:
+			push_error(
+				"몬스터 애니메이션을 등록하지 못했습니다 (%s): %s"
+				% [animation_kind, error_string(error)]
+			)
+		animation_scene.free()
+	if library.get_animation_list().is_empty():
+		return
+	var error := animation_player.add_animation_library("monster", library)
+	if error != OK:
+		push_error("몬스터 애니메이션 라이브러리를 연결하지 못했습니다: %s" % error_string(error))
+
+
+func _select_monster_source_animation(source_player: AnimationPlayer) -> String:
+	for animation_name in source_player.get_animation_list():
+		var name := str(animation_name)
+		if name != "RESET" and not name.ends_with("/RESET"):
+			return name
+	return ""
+
+
+func _strip_monster_root_motion(animation: Animation) -> void:
+	var tracks_to_remove: Array[int] = []
+	for track_index in range(animation.get_track_count()):
+		if animation.track_get_type(track_index) != Animation.TYPE_POSITION_3D:
+			continue
+		if not str(animation.track_get_path(track_index)).contains("bone_pose/position"):
+			tracks_to_remove.append(track_index)
+	tracks_to_remove.reverse()
+	for track_index in tracks_to_remove:
+		animation.remove_track(track_index)
+
+
 func _find_mesh_instance(root: Node) -> MeshInstance3D:
 	if root is MeshInstance3D:
 		return root as MeshInstance3D
@@ -163,22 +239,38 @@ func _find_animation_player(root: Node) -> AnimationPlayer:
 func _play_monster_animation(kind: String) -> void:
 	if animation_player == null:
 		return
-	var names := animation_player.get_animation_list()
-	var target := ""
-	for n in names:
-		var lower := str(n).to_lower()
-		if kind == "idle" and ("idle" in lower or "stand" in lower):
-			target = str(n); break
-		if kind == "walk" and ("walk" in lower or "run" in lower or "move" in lower):
-			target = str(n); break
-		if kind == "attack" and ("attack" in lower or "zombie attack" in lower):
-			target = str(n); break
-		if kind == "death" and ("death" in lower or "dying" in lower or "die" in lower):
-			target = str(n); break
-	if target.is_empty() and names.size() > 0:
-		target = str(names[0])
-	if not target.is_empty():
-		animation_player.play(target)
+	var target := "monster/%s" % kind
+	if not animation_player.has_animation(target):
+		var keywords := {
+			"idle": ["idle", "stand"],
+			"walk": ["walk", "run", "move"],
+			"attack": ["attack"],
+			"hit": ["hit", "reaction"],
+			"death": ["death", "dying", "die"],
+		}
+		for animation_name in animation_player.get_animation_list():
+			var lower := str(animation_name).to_lower()
+			for keyword in keywords.get(kind, []):
+				if keyword in lower:
+					target = str(animation_name)
+					break
+			if target != "monster/%s" % kind:
+				break
+	if not animation_player.has_animation(target):
+		return
+	if current_animation_kind == kind and animation_player.is_playing():
+		return
+	animation_player.play(target, 0.15)
+	current_animation_kind = kind
+	action_animation_kind = kind if kind in ["attack", "hit", "death"] else ""
+
+
+func _on_monster_animation_finished(_animation_name: StringName) -> void:
+	if dead and current_animation_kind == "death":
+		queue_free()
+		return
+	current_animation_kind = ""
+	action_animation_kind = ""
 
 func apply_damage(amount: float) -> void:
 	if dead:
@@ -191,12 +283,17 @@ func apply_damage(amount: float) -> void:
 	arena.call("show_damage_number", global_position + Vector3.UP * 1.6, amount, false)
 	if health <= 0.0:
 		dead = true
-		_play_monster_animation("death")
+		var has_death_animation := animation_player != null
+		if has_death_animation:
+			_play_monster_animation("death")
+			has_death_animation = current_animation_kind == "death"
 		GameAudio.play_sfx("monster_death")
 		set_physics_process(false)
 		collision_shape.set_deferred("disabled", true)
 		health_bar.hide()
 		arena.call("monster_defeated", global_position, monster_data, self)
+		if has_death_animation:
+			return
 		var target_node: Node3D = body_mesh if body_mesh != null else model_root
 		if target_node != null:
 			var death_tween := create_tween()
@@ -204,6 +301,8 @@ func apply_damage(amount: float) -> void:
 			death_tween.tween_callback(queue_free)
 		else:
 			queue_free()
+	else:
+		_play_monster_animation("hit")
 
 
 func _update_health_bar() -> void:
@@ -258,10 +357,11 @@ func _physics_process(delta: float) -> void:
 		attack_timer = 1.25
 		_play_monster_animation("attack")
 		player.take_damage(float(monster_data["attack"]))
-	if movement_intent.length_squared() > 0.01:
-		_play_monster_animation("walk")
-	else:
-		_play_monster_animation("idle")
+	if action_animation_kind.is_empty():
+		if movement_intent.length_squared() > 0.01:
+			_play_monster_animation("walk")
+		else:
+			_play_monster_animation("idle")
 
 	var moved := global_position.distance_to(last_position)
 	if movement_intent.length_squared() > 0.01 and moved < 0.015:

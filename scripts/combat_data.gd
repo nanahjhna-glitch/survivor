@@ -177,6 +177,13 @@ const MONSTERS := [
 		"size": 1.0,
 		"scene": "res://assets/monster/monster01/Model/monster01.fbx",
 		"texture": "res://assets/monster/monster01/Textures/monster01_texture.png",
+		"animations": {
+			"idle": "res://assets/monster/monster01/Animations/Zombie Idle.fbx",
+			"walk": "res://assets/monster/monster01/Animations/Walking.fbx",
+			"attack": "res://assets/monster/monster01/Animations/Zombie Attack.fbx",
+			"hit": "res://assets/monster/monster01/Animations/Zombie Reaction Hit.fbx",
+			"death": "res://assets/monster/monster01/Animations/Zombie Dying.fbx",
+		},
 	},
 ]
 

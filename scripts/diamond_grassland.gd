@@ -6,7 +6,7 @@ const DropScript = preload("res://scripts/field_drop.gd")
 const JoystickScript = preload("res://scripts/virtual_joystick.gd")
 const MinimapScript = preload("res://scripts/diamond_grassland_minimap.gd")
 const MAX_MONSTERS := 12
-const FIELD_RADIUS := 26.0
+const FIELD_RADIUS := 32.0
 const SKILL_BUTTON_SIZE := Vector2(70, 70)
 const AUTO_ATTACK_SCAN_INTERVAL := 0.1
 const MONSTER_SPAWN_INTERVAL := 0.933333
@@ -892,8 +892,8 @@ func _spawn_monster() -> void:
 	var angle: float = base_angles[random.randi_range(0, 3)] + random.randf_range(-0.35, 0.35)
 	var distance := random.randf_range(8.0, 12.0)
 	enemy.position = spawn_target.position + Vector3(cos(angle) * distance, 0.0, sin(angle) * distance)
-	enemy.position.x = clampf(enemy.position.x, -12.5, 12.5)
-	enemy.position.z = clampf(enemy.position.z, -12.5, 12.5)
+	enemy.position.x = clampf(enemy.position.x, -30.0, 30.0)
+	enemy.position.z = clampf(enemy.position.z, -30.0, 30.0)
 	add_child(enemy)
 	alive_monsters.append(enemy)
 	var cell := _spatial_cell(enemy.global_position)

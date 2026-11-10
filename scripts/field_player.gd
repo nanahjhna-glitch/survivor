@@ -778,8 +778,8 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	_update_movement_animation(delta)
 	if absf(global_position.x) > 12.5 or absf(global_position.z) > 12.5:
-		global_position.x = clampf(global_position.x, -12.5, 12.5)
-		global_position.z = clampf(global_position.z, -12.5, 12.5)
+		global_position.x = clampf(global_position.x, -30.0, 30.0)
+		global_position.z = clampf(global_position.z, -30.0, 30.0)
 		var boundary_normal := Vector3(signf(global_position.x), 0.0, signf(global_position.z)).normalized()
 		var outward_speed := velocity.dot(boundary_normal)
 		if outward_speed > 0.0:
