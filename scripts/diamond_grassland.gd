@@ -903,12 +903,10 @@ func _spawn_monster() -> void:
 
 
 func _choose_monster(level: int) -> Dictionary:
-	if elapsed_time > 100.0 and level >= 7 and random.randf() < 0.12:
-		return CombatData.MONSTERS[4]
-	var choices: Array[int] = [0, 0, 0, 1, 1, 3]
-	if level >= 3 or elapsed_time > 30.0:
-		choices.append(2)
-	return CombatData.MONSTERS[choices[random.randi_range(0, choices.size() - 1)]]
+	for monster in CombatData.MONSTERS:
+		if str(monster.get("id", "")) == "monster01":
+			return monster
+	return CombatData.MONSTERS[0]
 
 
 func perform_basic_attack(
