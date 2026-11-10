@@ -24,7 +24,7 @@ var _last_position := Vector3.ZERO
 func setup(actor: FieldPlayer, field: Node3D) -> void:
 	player = actor
 	arena = field
-	_last_position = actor.global_position
+	_last_position = actor.position
 
 
 func update(delta: float) -> void:

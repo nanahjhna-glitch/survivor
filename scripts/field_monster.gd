@@ -1,6 +1,8 @@
 class_name FieldMonster
 extends CharacterBody3D
 
+static var _source_animation_cache: Dictionary = {}
+
 const ATTACK_RANGE := 1.15
 const TARGET_RETHINK_INTERVAL := 0.6
 const TARGET_LOCK_DURATION := 0.7
@@ -163,22 +165,13 @@ func _load_monster_animations(animation_paths: Dictionary) -> void:
 	var library := AnimationLibrary.new()
 	for animation_kind in animation_paths:
 		var scene_path := str(animation_paths[animation_kind])
-		var packed_scene := load(scene_path) as PackedScene
-		if packed_scene == null:
-			push_error("몬스터 애니메이션을 불러오지 못했습니다: %s" % scene_path)
-			continue
-		var animation_scene := packed_scene.instantiate()
-		var source_player := _find_animation_player(animation_scene)
-		if source_player == null:
-			push_error("애니메이션 파일에 AnimationPlayer가 없습니다: %s" % scene_path)
-			animation_scene.free()
-			continue
-		var source_animation_name := _select_monster_source_animation(source_player)
-		if source_animation_name.is_empty():
-			push_error("재생 가능한 몬스터 애니메이션이 없습니다: %s" % scene_path)
-			animation_scene.free()
-			continue
-		var animation := source_player.get_animation(source_animation_name).duplicate(true)
+		var source_animation := _source_animation_cache.get(scene_path) as Animation
+		if source_animation == null:
+			source_animation = _load_monster_source_animation(scene_path)
+			if source_animation == null:
+				continue
+			_source_animation_cache[scene_path] = source_animation
+		var animation := source_animation.duplicate(true)
 		_strip_monster_root_motion(animation)
 		if animation_kind == "idle":
 			_remove_idle_hip_tilt(animation)
@@ -192,12 +185,32 @@ func _load_monster_animations(animation_paths: Dictionary) -> void:
 				"몬스터 애니메이션을 등록하지 못했습니다 (%s): %s"
 				% [animation_kind, error_string(error)]
 			)
-		animation_scene.free()
 	if library.get_animation_list().is_empty():
 		return
 	var error := animation_player.add_animation_library("monster", library)
 	if error != OK:
 		push_error("몬스터 애니메이션 라이브러리를 연결하지 못했습니다: %s" % error_string(error))
+
+
+func _load_monster_source_animation(scene_path: String) -> Animation:
+	var packed_scene := load(scene_path) as PackedScene
+	if packed_scene == null:
+		push_error("몬스터 애니메이션을 불러오지 못했습니다: %s" % scene_path)
+		return null
+	var animation_scene := packed_scene.instantiate()
+	var source_player := _find_animation_player(animation_scene)
+	if source_player == null:
+		push_error("애니메이션 파일에 AnimationPlayer가 없습니다: %s" % scene_path)
+		animation_scene.free()
+		return null
+	var source_animation_name := _select_monster_source_animation(source_player)
+	if source_animation_name.is_empty():
+		push_error("재생 가능한 몬스터 애니메이션이 없습니다: %s" % scene_path)
+		animation_scene.free()
+		return null
+	var animation := source_player.get_animation(source_animation_name).duplicate(true)
+	animation_scene.free()
+	return animation
 
 
 func _select_monster_source_animation(source_player: AnimationPlayer) -> String:

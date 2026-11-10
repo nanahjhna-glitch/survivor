@@ -7,6 +7,7 @@ const JoystickScript = preload("res://scripts/virtual_joystick.gd")
 const MinimapScript = preload("res://scripts/diamond_grassland_minimap.gd")
 const MAX_MONSTERS := 8
 const FIELD_RADIUS := 32.0
+const HUD_UPDATE_INTERVAL := 0.1
 const SKILL_BUTTON_SIZE := Vector2(70, 70)
 const AUTO_ATTACK_SCAN_INTERVAL := 0.1
 const MONSTER_SPAWN_INTERVAL := 1.5
@@ -52,6 +53,7 @@ var skill_cast_remaining := 0.0
 var elapsed_time := 0.0
 var spawn_clock := 0.0
 var auto_attack_scan_timer := 0.0
+var hud_update_timer := 0.0
 var auto_cast_enabled := false
 var auto_cast_button: Button
 var auto_hunt_state := AutoHuntState.SEARCH
@@ -104,7 +106,6 @@ func _process(delta: float) -> void:
 	if is_instance_valid(player) and not player.dead:
 		for index in range(player.skill_cooldowns.size()):
 			player.skill_cooldowns[index] = maxf(0.0, player.skill_cooldowns[index] - delta)
-			_update_skill_button(index)
 		if player.casting_skill_index >= 0:
 			player.skill_cast_remaining = maxf(0.0, player.skill_cast_remaining - delta)
 			if player.skill_cast_remaining == 0.0:
@@ -133,7 +134,10 @@ func _process(delta: float) -> void:
 	elif spawn_clock >= MONSTER_SPAWN_INTERVAL:
 		spawn_clock -= MONSTER_SPAWN_INTERVAL
 		_spawn_monster()
-	_update_hud()
+	hud_update_timer -= delta
+	if hud_update_timer <= 0.0:
+		hud_update_timer = HUD_UPDATE_INTERVAL
+		_update_hud()
 	_update_camera(delta)
 
 
@@ -282,16 +286,27 @@ func _build_field() -> void:
 	var floor_body := StaticBody3D.new()
 	floor_body.name = "GrasslandGround"
 	floor_body.position.y = -0.3
-	var plane := MeshInstance3D.new()
-	var plane_mesh := PlaneMesh.new()
-	plane_mesh.size = Vector2(25.0, 25.0)
-	plane.mesh = plane_mesh
+	var tile_mesh := load("res://assets/field/Essential_Isometric_3D_Block_Pack_Devilsworkshop_v2.0/Assets/OBJ/groundEarthCheckered.obj")
+	var tile_size := 1.0
+	var half := 12.0
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.mesh = tile_mesh
+	var count := int((half * 2 + 1) * (half * 2 + 1))
+	multimesh.instance_count = count
+	var idx := 0
+	for x in range(-int(half), int(half) + 1):
+		for z in range(-int(half), int(half) + 1):
+			var t := Transform3D(Basis(), Vector3(x * tile_size, -0.3, z * tile_size))
+			multimesh.set_instance_transform(idx, t)
+			idx += 1
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = multimesh
 	var mat := StandardMaterial3D.new()
-	mat.albedo_texture = load("res://assets/field/Grass 8x8/grass01.png")
+	mat.albedo_texture = load("res://assets/field/Essential_Isometric_3D_Block_Pack_Devilsworkshop_v2.0/Assets/Textures/groundEarthCheckered.png")
 	mat.roughness = 1.0
-	plane.material_override = mat
-	plane.position = Vector3(0, -0.3, 0)
-	add_child(plane)
+	mmi.material_override = mat
+	add_child(mmi)
 	var floor_collider := CollisionShape3D.new()
 	var box_shape := BoxShape3D.new()
 	box_shape.size = Vector3(25.0, 0.2, 25.0)
@@ -328,7 +343,7 @@ func _create_diamond_ground_mesh() -> ArrayMesh:
 
 
 func _add_square_boundary() -> void:
-	var half := 12.5
+	var half := 6.0
 	var corners := [
 		Vector3(-half, 0, -half),
 		Vector3(half, 0, -half),
@@ -491,7 +506,7 @@ func _build_voxel_forest_decorations() -> void:
 	# 잔디/꽃 산포
 	for i in range(20):
 		var p := Vector3(random.randf_range(-20.0, 20.0), 0.0, random.randf_range(-20.0, 20.0))
-		if absf(p.x) >= 12.5 or absf(p.z) >= 12.5:
+		if absf(p.x) >= 6.0 or absf(p.z) >= 6.0:
 			continue
 		if Vector2(p.x, p.z).length() < 3.0:
 			continue
@@ -502,14 +517,14 @@ func _build_voxel_forest_decorations() -> void:
 	# 버섯 소수 배치
 	for i in range(3):
 		var p := Vector3(random.randf_range(-18.0, 18.0), 0.0, random.randf_range(-18.0, 18.0))
-		if absf(p.x) >= 12.5 or absf(p.z) >= 12.5:
+		if absf(p.x) >= 6.0 or absf(p.z) >= 6.0:
 			continue
 		_add_voxel_decoration(mushroom_path, p, Vector3.ONE * random.randf_range(0.9, 1.1), random.randf_range(0.0, TAU), false)
 
 	# 상자 소품
 	for i in range(2):
 		var p := Vector3(random.randf_range(-12.0, 12.0), 0.0, random.randf_range(-12.0, 12.0))
-		if absf(p.x) >= 12.5 or absf(p.z) >= 12.5:
+		if absf(p.x) >= 6.0 or absf(p.z) >= 6.0:
 			continue
 		var path: String = box_paths[random.randi_range(0, box_paths.size() - 1)]
 		_add_voxel_decoration(path, p, Vector3.ONE * 0.9, random.randf_range(0.0, TAU), true)
@@ -890,7 +905,7 @@ func _spawn_monster() -> void:
 	enemy.setup(self, spawn_target, data)
 	var base_angles := [0.0, PI * 0.5, PI, PI * 1.5]
 	var angle: float = base_angles[random.randi_range(0, 3)] + random.randf_range(-0.35, 0.35)
-	var distance := random.randf_range(8.0, 12.0)
+	var distance := random.randf_range(3.0, 5.0)
 	enemy.position = spawn_target.position + Vector3(cos(angle) * distance, 0.0, sin(angle) * distance)
 	enemy.position.x = clampf(enemy.position.x, -30.0, 30.0)
 	enemy.position.z = clampf(enemy.position.z, -30.0, 30.0)
@@ -903,10 +918,13 @@ func _spawn_monster() -> void:
 
 
 func _choose_monster(level: int) -> Dictionary:
+	var candidates: Array = []
 	for monster in CombatData.MONSTERS:
-		if str(monster.get("id", "")) == "monster01":
-			return monster
-	return CombatData.MONSTERS[0]
+		if str(monster.get("id", "")) in ["monster01", "monster02"]:
+			candidates.append(monster)
+	if candidates.is_empty():
+		return CombatData.MONSTERS[0]
+	return candidates[random.randi_range(0, candidates.size() - 1)]
 
 
 func perform_basic_attack(
@@ -1564,13 +1582,22 @@ func _show_notification(message: String, duration := 2.0) -> void:
 func _update_hud() -> void:
 	if player == null:
 		return
-	level_label.text = "Lv. %d" % player.get("level")
-	time_label.text = "%02d:%02d" % [int(elapsed_time / 60.0), int(elapsed_time) % 60]
-	gold_label.text = "골드 %d" % GameData.gold
+	var level_text := "Lv. %d" % player.get("level")
+	var time_text := "%02d:%02d" % [int(elapsed_time / 60.0), int(elapsed_time) % 60]
+	var gold_text := "골드 %d" % GameData.gold
+	if level_label.text != level_text:
+		level_label.text = level_text
+	if time_label.text != time_text:
+		time_label.text = time_text
+	if gold_label.text != gold_text:
+		gold_label.text = gold_text
 	if top_time_label != null:
-		top_time_label.text = "%02d:%02d" % [int(elapsed_time / 60.0), int(elapsed_time) % 60]
+		if top_time_label.text != time_text:
+			top_time_label.text = time_text
 	if top_kills_label != null:
-		top_kills_label.text = "처치 %d" % total_kills
+		var kills_text := "처치 %d" % total_kills
+		if top_kills_label.text != kills_text:
+			top_kills_label.text = kills_text
 	for index in range(skill_buttons.size()):
 		_update_skill_button(index)
 
@@ -1578,25 +1605,32 @@ func _update_hud() -> void:
 func _update_skill_button(index: int) -> void:
 	if index >= skill_buttons.size() or player == null:
 		return
+	var button := skill_buttons[index]
+	var text := ""
+	var disabled := false
 	if not _actor_has_skill(player, index):
-		skill_buttons[index].disabled = true
-		skill_buttons[index].text = "직업 스킬\n아님"
-		return
-	var skill: Dictionary = CombatData.SKILLS[index]
-	var level := int(player.get("level"))
-	var unlocked := level >= int(skill["unlock_level"])
-	var remaining := player.skill_cooldowns[index]
-	skill_buttons[index].disabled = (
-		not unlocked or remaining > 0.0 or paused or player.casting_skill_index >= 0
-	)
-	if not unlocked:
-		skill_buttons[index].text = "🔒 S%d\nLv.%d" % [skill["id"], skill["unlock_level"]]
-	elif player.casting_skill_index == index:
-		skill_buttons[index].text = "S%d\n시전 %.1f" % [skill["id"], player.skill_cast_remaining]
-	elif remaining > 0.0:
-		skill_buttons[index].text = "S%d\n%.1f초" % [skill["id"], remaining]
+		text = "직업 스킬\n아님"
+		disabled = true
 	else:
-		skill_buttons[index].text = "S%d\n준비" % skill["id"]
+		var skill: Dictionary = CombatData.SKILLS[index]
+		var level := int(player.get("level"))
+		var unlocked := level >= int(skill["unlock_level"])
+		var remaining := player.skill_cooldowns[index]
+		disabled = (
+			not unlocked or remaining > 0.0 or paused or player.casting_skill_index >= 0
+		)
+		if not unlocked:
+			text = "🔒 S%d\nLv.%d" % [skill["id"], skill["unlock_level"]]
+		elif player.casting_skill_index == index:
+			text = "S%d\n시전 %.1f" % [skill["id"], player.skill_cast_remaining]
+		elif remaining > 0.0:
+			text = "S%d\n%.1f초" % [skill["id"], remaining]
+		else:
+			text = "S%d\n준비" % skill["id"]
+	if button.disabled != disabled:
+		button.disabled = disabled
+	if button.text != text:
+		button.text = text
 
 
 func _update_camera(delta: float = 1.0 / 60.0) -> void:
@@ -1809,7 +1843,7 @@ func _build_field_decorations() -> void:
 		_add_fbx(fence_path, pos, Vector3.ONE, -angle + PI * 0.5, true)
 	for i in range(8):
 		var p := Vector3(random.randf_range(-20.0, 20.0), 0.0, random.randf_range(-20.0, 20.0))
-		if absf(p.x) >= 12.5 or absf(p.z) >= 12.5:
+		if absf(p.x) >= 6.0 or absf(p.z) >= 6.0:
 			continue
 		if Vector2(p.x, p.z).length() < 4.0:
 			continue
@@ -1817,7 +1851,7 @@ func _build_field_decorations() -> void:
 		_add_fbx(bed, p, Vector3.ONE, random.randf_range(0.0, TAU), false)
 	for i in range(6):
 		var p := Vector3(random.randf_range(-18.0, 18.0), 0.0, random.randf_range(-18.0, 18.0))
-		if absf(p.x) >= 12.5 or absf(p.z) >= 12.5:
+		if absf(p.x) >= 6.0 or absf(p.z) >= 6.0:
 			continue
 		_add_fbx(base + "misc_models/stone/bench01.fbx", p, Vector3.ONE, random.randf_range(0.0, TAU), true)
 	_add_fbx(base + "misc_models/stone/fountain01_round.fbx", Vector3(6, 0, 6), Vector3.ONE, 0.0, true)

@@ -1,6 +1,8 @@
 class_name FieldPlayer
 extends CharacterBody3D
 
+static var _source_animation_cache: Dictionary = {}
+
 signal health_changed(current: float, maximum: float)
 signal experience_changed(current: int, required: int)
 signal level_changed(level: int, unlocked_skill: int)
@@ -56,6 +58,7 @@ var auto_hunt_controller: AutoHuntController = null
 var invulnerability_time := 0.0
 var visual_root: Node3D
 var model_animation_player: AnimationPlayer
+var _character_animation_paths: Dictionary = {}
 var world_hp_fill: MeshInstance3D
 var current_model_animation := ""
 var action_animation_remaining := 0.0
@@ -231,12 +234,25 @@ func _build_model_visual(character: Dictionary) -> bool:
 	_apply_character_texture(model, str(visual.get("texture", "")))
 	model_animation_player = _find_animation_player(model)
 	var animation_paths: Dictionary = visual.get("animations", {})
+	_character_animation_paths = animation_paths
 	if model_animation_player == null and not animation_paths.is_empty():
 		model_animation_player = AnimationPlayer.new()
 		model_animation_player.name = "CharacterAnimations"
-		model_animation_player.root_node = NodePath("..")
 		model.add_child(model_animation_player)
-	_load_character_animations(animation_paths)
+	if model_animation_player != null and not animation_paths.is_empty():
+		for library_name in model_animation_player.get_animation_library_list():
+			if library_name != "character":
+				model_animation_player.remove_animation_library(library_name)
+	var skeleton := _find_skeleton(model)
+	if model_animation_player != null and skeleton != null and skeleton.get_parent() != null:
+		model_animation_player.root_node = _relative_node_path(
+			model_animation_player, skeleton.get_parent()
+		)
+	var startup_animation_ids: Array[String] = []
+	for animation_id in animation_paths:
+		if not str(animation_id).begins_with("skill_"):
+			startup_animation_ids.append(str(animation_id))
+	_load_character_animations(animation_paths, startup_animation_ids)
 	if model_animation_player != null:
 		model_animation_player.animation_finished.connect(_on_character_animation_finished)
 	_attach_character_weapon(model, visual)
@@ -344,6 +360,32 @@ func _find_skeleton(root: Node) -> Skeleton3D:
 	return null
 
 
+func _relative_node_path(from_node: Node, to_node: Node) -> NodePath:
+	var from_ancestors: Array[Node] = []
+	var current: Node = from_node
+	while current != null:
+		from_ancestors.append(current)
+		current = current.get_parent()
+	var to_ancestors: Array[Node] = []
+	current = to_node
+	while current != null:
+		to_ancestors.append(current)
+		current = current.get_parent()
+	var common_ancestor: Node = null
+	for ancestor in from_ancestors:
+		if to_ancestors.has(ancestor):
+			common_ancestor = ancestor
+			break
+	if common_ancestor == null:
+		return NodePath()
+	var path_parts := PackedStringArray()
+	for _index in range(from_ancestors.find(common_ancestor)):
+		path_parts.append("..")
+	for index in range(to_ancestors.find(common_ancestor) - 1, -1, -1):
+		path_parts.append(str(to_ancestors[index].name))
+	return NodePath("/".join(path_parts)) if not path_parts.is_empty() else NodePath(".")
+
+
 func _find_hand_bone_name(skeleton: Skeleton3D) -> String:
 	for i in range(skeleton.get_bone_count()):
 		var name := skeleton.get_bone_name(i)
@@ -382,11 +424,21 @@ func _apply_material_to_meshes(root: Node, material: StandardMaterial3D) -> void
 		_apply_material_to_meshes(child, material)
 
 
-func _load_character_animations(animation_paths: Dictionary) -> void:
+func _load_character_animations(
+	animation_paths: Dictionary, animation_ids: Array[String] = []
+) -> void:
 	if model_animation_player == null or animation_paths.is_empty():
 		return
 	var library := AnimationLibrary.new()
-	for animation_id in animation_paths:
+	var requested_ids: Array[String] = []
+	if animation_ids.is_empty():
+		for animation_id in animation_paths:
+			requested_ids.append(str(animation_id))
+	else:
+		requested_ids = animation_ids
+	for animation_id in requested_ids:
+		if not animation_paths.has(animation_id):
+			continue
 		var animation_config: Variant = animation_paths[animation_id]
 		var scene_path := ""
 		var clip_hint := ""
@@ -395,29 +447,20 @@ func _load_character_animations(animation_paths: Dictionary) -> void:
 			clip_hint = str(animation_config.get("clip", ""))
 		else:
 			scene_path = str(animation_config)
-		var packed_scene := load(scene_path) as PackedScene
-		if packed_scene == null:
-			push_error("캐릭터 애니메이션을 불러오지 못했습니다: %s" % scene_path)
-			continue
-		var animation_scene := packed_scene.instantiate()
-		var source_player := _find_animation_player(animation_scene)
-		if source_player == null:
-			push_error("애니메이션 파일에 AnimationPlayer가 없습니다: %s" % scene_path)
-			animation_scene.free()
-			continue
-		var animation_name := _select_imported_animation(source_player, clip_hint, scene_path)
-		if animation_name.is_empty():
-			push_error("재생 가능한 애니메이션이 없습니다: %s" % scene_path)
-			animation_scene.free()
-			continue
-		var animation := source_player.get_animation(animation_name).duplicate(true)
+		var cache_key := "%s|%s" % [scene_path, clip_hint]
+		var source_animation := _source_animation_cache.get(cache_key) as Animation
+		if source_animation == null:
+			source_animation = _load_source_animation(scene_path, clip_hint)
+			if source_animation == null:
+				continue
+			_source_animation_cache[cache_key] = source_animation
+		var animation := source_animation.duplicate(true)
 		_strip_root_motion_tracks(animation)
 		if animation_id == "walk" or animation_id == "run" or animation_id == "idle":
 			animation.loop_mode = Animation.LOOP_LINEAR
 		else:
 			animation.loop_mode = Animation.LOOP_NONE
 		library.add_animation(str(animation_id), animation)
-		animation_scene.free()
 	if library.get_animation_list().is_empty():
 		return
 	var target_library: AnimationLibrary
@@ -440,6 +483,27 @@ func _load_character_animations(animation_paths: Dictionary) -> void:
 				push_error("캐릭터 애니메이션을 등록하지 못했습니다 (%s): %s" % [animation_id, error_string(error)])
 	if not _has_character_animation("walk"):
 		push_error("캐릭터에 걷기 애니메이션이 등록되지 않았습니다.")
+
+
+func _load_source_animation(scene_path: String, clip_hint: String) -> Animation:
+	var packed_scene := load(scene_path) as PackedScene
+	if packed_scene == null:
+		push_error("캐릭터 애니메이션을 불러오지 못했습니다: %s" % scene_path)
+		return null
+	var animation_scene := packed_scene.instantiate()
+	var source_player := _find_animation_player(animation_scene)
+	if source_player == null:
+		push_error("애니메이션 파일에 AnimationPlayer가 없습니다: %s" % scene_path)
+		animation_scene.free()
+		return null
+	var animation_name := _select_imported_animation(source_player, clip_hint, scene_path)
+	if animation_name.is_empty():
+		push_error("재생 가능한 애니메이션이 없습니다: %s" % scene_path)
+		animation_scene.free()
+		return null
+	var animation := source_player.get_animation(animation_name).duplicate(true)
+	animation_scene.free()
+	return animation
 
 
 func _strip_root_motion_tracks(animation: Animation) -> void:
@@ -497,7 +561,7 @@ func play_character_animation(
 	if model_animation_player == null:
 		return 0.0
 	var animation_name := "character/%s" % animation_id
-	if not _has_character_animation(animation_id):
+	if not _ensure_character_animation(animation_id):
 		return 0.0
 	if current_model_animation == animation_name and model_animation_player.is_playing():
 		model_animation_player.speed_scale = playback_speed
@@ -547,6 +611,15 @@ func _has_character_animation(animation_id: String) -> bool:
 		model_animation_player != null
 		and model_animation_player.has_animation("character/%s" % animation_id)
 	)
+
+
+func _ensure_character_animation(animation_id: String) -> bool:
+	if _has_character_animation(animation_id):
+		return true
+	if not _character_animation_paths.has(animation_id):
+		return false
+	_load_character_animations(_character_animation_paths, [animation_id])
+	return _has_character_animation(animation_id)
 
 
 func _add_knight_details() -> void:
@@ -777,9 +850,9 @@ func _physics_process(delta: float) -> void:
 		weapon.rotation.z = -sin((attack_animation_time / 0.28) * PI) * 1.15
 	move_and_slide()
 	_update_movement_animation(delta)
-	if absf(global_position.x) > 12.5 or absf(global_position.z) > 12.5:
-		global_position.x = clampf(global_position.x, -30.0, 30.0)
-		global_position.z = clampf(global_position.z, -30.0, 30.0)
+	if absf(global_position.x) > 6.0 or absf(global_position.z) > 6.0:
+		global_position.x = clampf(global_position.x, -6.0, 6.0)
+		global_position.z = clampf(global_position.z, -6.0, 6.0)
 		var boundary_normal := Vector3(signf(global_position.x), 0.0, signf(global_position.z)).normalized()
 		var outward_speed := velocity.dot(boundary_normal)
 		if outward_speed > 0.0:
