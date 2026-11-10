@@ -69,7 +69,12 @@ var facing_target: Node3D
 var movement_animation_state := "idle"
 var animation_playback_speed := 1.0
 var legs: Array[MeshInstance3D] = []
-var weapon: MeshInstance3D
+var weapon: Node3D
+var weapon_socket: BoneAttachment3D
+var weapon_model_root: Node3D
+var weapon_profiles: Dictionary = {}
+var weapon_bone_name := ""
+var weapon_is_bone_attached := false
 var animation_clock := 0.0
 var attack_animation_time := 0.0
 var regen_timer := 0.0
@@ -227,8 +232,128 @@ func _build_model_visual(character: Dictionary) -> bool:
 	_load_character_animations(animation_paths)
 	if model_animation_player != null:
 		model_animation_player.animation_finished.connect(_on_character_animation_finished)
+	_attach_character_weapon(model, visual)
 	return true
 
+
+func _attach_character_weapon(model: Node, visual: Dictionary) -> void:
+	if not visual.has("weapon_profiles"):
+		return
+	weapon_profiles = visual.get("weapon_profiles", {})
+	if weapon_profiles.is_empty():
+		push_error("char03 무기 프로필이 비어 있습니다.")
+		return
+	weapon_model_root = model as Node3D
+	weapon_bone_name = str(visual.get("weapon_bone", ""))
+	equip_weapon(str(visual.get("default_weapon", "")))
+
+
+func equip_weapon(weapon_type: String) -> bool:
+	if dead:
+		push_warning("사망한 캐릭터에는 무기를 장착할 수 없습니다.")
+		return false
+	if not weapon_profiles.has(weapon_type):
+		push_error("char03에 등록되지 않은 무기 종류입니다: %s" % weapon_type)
+		return false
+	var profile: Variant = weapon_profiles[weapon_type]
+	if not profile is Dictionary:
+		push_error("무기 설정 형식이 올바르지 않습니다: %s" % weapon_type)
+		return false
+	var weapon_scene_path := str(profile.get("scene", ""))
+	if weapon_scene_path.is_empty():
+		push_error("무기 씬 경로가 비어 있습니다: %s" % weapon_type)
+		return false
+	var packed_scene := load(weapon_scene_path) as PackedScene
+	if packed_scene == null:
+		push_error("무기 모델을 불러오지 못했습니다: %s" % weapon_scene_path)
+		return false
+	if not is_instance_valid(weapon_model_root):
+		push_error("무기를 장착할 캐릭터 모델을 찾을 수 없습니다.")
+		return false
+	var skeleton := _find_skeleton(weapon_model_root)
+	if skeleton == null:
+		push_error("char03 모델에서 Skeleton3D를 찾을 수 없습니다.")
+		return false
+	var bone_name := weapon_bone_name
+	if bone_name.is_empty() or skeleton.find_bone(bone_name) < 0:
+		if not bone_name.is_empty():
+			push_warning("오른손 본 이름이 유효하지 않습니다: %s" % bone_name)
+		bone_name = _find_hand_bone_name(skeleton)
+	if bone_name.is_empty() or skeleton.find_bone(bone_name) < 0:
+		push_error("char03 스켈레톤에서 오른손 본을 찾을 수 없습니다.")
+		return false
+	var instance := packed_scene.instantiate()
+	if instance == null:
+		push_error("무기 씬 인스턴스를 생성하지 못했습니다: %s" % weapon_scene_path)
+		return false
+	var weapon_instance := instance as Node3D
+	if weapon_instance == null:
+		var wrapper := Node3D.new()
+		wrapper.add_child(instance)
+		weapon_instance = wrapper
+	weapon_instance.name = "CharacterWeapon"
+	weapon_instance.position = profile.get("position", Vector3.ZERO)
+	weapon_instance.rotation_degrees = profile.get("rotation_degrees", Vector3.ZERO)
+	weapon_instance.scale = profile.get("scale", Vector3.ONE)
+	if (
+		is_instance_valid(weapon_socket)
+		and weapon_socket.get_parent() == skeleton
+		and weapon_socket.bone_name == bone_name
+	):
+		if is_instance_valid(weapon):
+			weapon_socket.remove_child(weapon)
+			weapon.queue_free()
+	else:
+		if is_instance_valid(weapon_socket):
+			weapon_socket.queue_free()
+		weapon_socket = BoneAttachment3D.new()
+		weapon_socket.name = "WeaponSocket"
+		weapon_socket.bone_name = bone_name
+		skeleton.add_child(weapon_socket)
+	weapon_socket.add_child(weapon_instance)
+	weapon = weapon_instance
+	weapon_bone_name = bone_name
+	weapon_is_bone_attached = true
+	return true
+
+
+func _clear_attached_weapon() -> void:
+	if is_instance_valid(weapon_socket):
+		weapon_socket.queue_free()
+	elif is_instance_valid(weapon):
+		weapon.queue_free()
+	weapon_socket = null
+	weapon = null
+	weapon_is_bone_attached = false
+
+
+func _find_skeleton(root: Node) -> Skeleton3D:
+	if root is Skeleton3D:
+		return root as Skeleton3D
+	for child in root.get_children():
+		var found := _find_skeleton(child)
+		if found != null:
+			return found
+	return null
+
+
+func _find_hand_bone_name(skeleton: Skeleton3D) -> String:
+	for i in range(skeleton.get_bone_count()):
+		var name := skeleton.get_bone_name(i)
+		var lower := name.to_lower()
+		if (
+			(lower.contains("right") and lower.contains("hand"))
+			or lower.contains("righthand")
+			or lower.contains("r_hand")
+			or lower.ends_with(".r")
+			or lower.ends_with("_r")
+		) and lower.contains("hand"):
+			return name
+	var names := []
+	for i in range(skeleton.get_bone_count()):
+		names.append(skeleton.get_bone_name(i))
+	push_warning("오른손 본을 찾지 못했습니다. 본 목록: %s" % str(names))
+	return ""
 
 func _apply_character_texture(model: Node, texture_path: String) -> void:
 	if texture_path.is_empty():
@@ -559,6 +684,8 @@ func take_damage(amount: float) -> void:
 	arena.call("show_damage_number", global_position + Vector3.UP * 1.6, mitigated_damage, true)
 	if health <= 0.0:
 		dead = true
+		if weapon_is_bone_attached:
+			_clear_attached_weapon()
 		player_died.emit()
 
 
@@ -639,7 +766,7 @@ func _physics_process(delta: float) -> void:
 		_turn_toward(facing_target.global_position - global_position, delta)
 	elif not skill_movement_locked and direction.length_squared() > 0.01:
 		_turn_toward(direction, delta)
-	if weapon != null:
+	if is_instance_valid(weapon) and not weapon_is_bone_attached:
 		weapon.rotation.z = -sin((attack_animation_time / 0.28) * PI) * 1.15
 	move_and_slide()
 	_update_movement_animation(delta)

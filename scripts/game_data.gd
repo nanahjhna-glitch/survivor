@@ -1,4 +1,4 @@
-﻿extends Node
+extends Node
 
 var party_size: int = CHARACTERS.size()
 const SAVE_PATH := "user://survivor_save.cfg"
@@ -6,10 +6,10 @@ const DB_PATH := "user://survivor_save.db"
 
 const CHARACTERS := [
 	{
-		"name": "寃ъ뒿 湲곗궗",
-		"title": "洹좏삎 ?≫엺 紐⑦뿕媛",
-		"weapon": "?≪? ?κ?",
-		"passive": "理쒕? 泥대젰 +10%",
+		"name": "견습 기사",
+		"title": "초보 모험가",
+		"weapon": "목검",
+		"passive": "최대 체력 +10%",
 		"stats": [80, 60, 55],
 		"attack_style": "melee",
 		"attributes": {"STR": 5, "AGI": 3, "VIT": 5, "INT": 1, "DEX": 2, "LUK": 2},
@@ -162,6 +162,39 @@ const CHARACTERS := [
 			"forward_rotation_degrees": 0.0,
 			"vertical_offset": -0.4,
 			"texture": "res://assets/characters/char03/Model/char03_texture.png",
+			"weapon_bone": "mixamorig:RightHand",
+			"default_weapon": "Sword",
+			"weapon_profiles":
+			{
+				"Sword":
+				{
+					"scene": "res://assets/items/weapon/sword_2handed.fbx",
+					"position": Vector3.ZERO,
+					"rotation_degrees": Vector3.ZERO,
+					"scale": Vector3.ONE * 0.3,
+				},
+				"Crossbow":
+				{
+					"scene": "res://assets/items/weapon/crossbow_1handed.fbx",
+					"position": Vector3.ZERO,
+					"rotation_degrees": Vector3.ZERO,
+					"scale": Vector3.ONE * 0.1,
+				},
+				"Bow":
+				{
+					"scene": "res://assets/items/weapon/bow_withString.fbx",
+					"position": Vector3.ZERO,
+					"rotation_degrees": Vector3.ZERO,
+					"scale": Vector3.ONE * 0.1,
+				},
+				"Staff":
+				{
+					"scene": "res://assets/items/weapon/staff.fbx",
+					"position": Vector3.ZERO,
+					"rotation_degrees": Vector3.ZERO,
+					"scale": Vector3.ONE * 0.1,
+				},
+			},
 			"animations":
 			{
 				"walk":
@@ -222,12 +255,12 @@ const CHARACTERS := [
 
 const STAGES := [
 	{
-		"name": "?ㅼ씠?꾨が??珥덉썝",
-		"subtitle": "?섏젙??鍮쏆씠 源껊뱺 泥?紐⑦뿕吏",
-		"difficulty": "?ъ?",
+		"name": "슬라임 초원",
+		"subtitle": "정령의 기운이 가득한 초원",
+		"difficulty": "쉬움",
 		"level": 1,
-		"monsters": "?щ씪??쨌 怨좊툝由?쨌 ?ㅺ컻 쨌 ?섏젙 怨⑤젞",
-		"reward": "寃쏀뿕移?쨌 怨⑤뱶 쨌 HP ?ъ뀡",
+		"monsters": "슬라임 · 고블린 · 박쥐 · 정령 골렘",
+		"reward": "경험치 · 골드 · HP 물약",
 		"color": Color("#91c878"),
 	},
 ]
