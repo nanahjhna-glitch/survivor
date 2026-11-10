@@ -176,6 +176,7 @@ const MONSTERS := [
 		"color": Color("#9b7bd3"),
 		"size": 1.0,
 		"scene": "res://assets/monster/monster01/Model/monster01.fbx",
+		"texture": "res://assets/monster/monster01/Textures/monster01_texture.png",
 	},
 ]
 

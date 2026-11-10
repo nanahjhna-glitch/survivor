@@ -24,6 +24,7 @@ var last_position := Vector3.ZERO
 var dead := false
 var body_mesh: MeshInstance3D
 var model_root: Node3D
+var animation_player: AnimationPlayer
 var health_bar: Label3D
 var collision_shape: CollisionShape3D
 
@@ -65,9 +66,19 @@ func _build_visuals() -> void:
 				model.scale = Vector3.ONE * size
 				add_child(model)
 				model_root = model
+				var texture_path := str(monster_data.get("texture", ""))
+				if not texture_path.is_empty():
+					var texture := load(texture_path) as Texture2D
+					if texture == null:
+						push_error("몬스터 텍스처를 불러오지 못했습니다: %s" % texture_path)
+					else:
+						_apply_model_texture(model, texture)
 				body_mesh = model as MeshInstance3D
 				if body_mesh == null:
 					body_mesh = _find_mesh_instance(model)
+				animation_player = _find_animation_player(model)
+				if animation_player != null:
+					_play_monster_animation("idle")
 				if body_mesh == null:
 					body_mesh = null
 					push_warning("몬스터 모델에서 MeshInstance3D를 찾지 못했습니다.")
@@ -113,6 +124,24 @@ func _build_visuals() -> void:
 	health_bar.hide()
 
 
+func _apply_model_texture(root: Node, texture: Texture2D) -> void:
+	if root is MeshInstance3D:
+		var mesh_instance := root as MeshInstance3D
+		if mesh_instance.mesh != null:
+			for surface_index in range(mesh_instance.mesh.get_surface_count()):
+				var existing_material := mesh_instance.get_active_material(surface_index)
+				var textured_material: BaseMaterial3D
+				if existing_material is BaseMaterial3D:
+					textured_material = (existing_material as BaseMaterial3D).duplicate() as BaseMaterial3D
+				else:
+					textured_material = StandardMaterial3D.new()
+				textured_material.albedo_texture = texture
+				textured_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+				mesh_instance.set_surface_override_material(surface_index, textured_material)
+	for child in root.get_children():
+		_apply_model_texture(child, texture)
+
+
 func _find_mesh_instance(root: Node) -> MeshInstance3D:
 	if root is MeshInstance3D:
 		return root as MeshInstance3D
@@ -121,6 +150,35 @@ func _find_mesh_instance(root: Node) -> MeshInstance3D:
 		if found != null:
 			return found
 	return null
+
+func _find_animation_player(root: Node) -> AnimationPlayer:
+	if root is AnimationPlayer:
+		return root as AnimationPlayer
+	for child in root.get_children():
+		var found := _find_animation_player(child)
+		if found != null:
+			return found
+	return null
+
+func _play_monster_animation(kind: String) -> void:
+	if animation_player == null:
+		return
+	var names := animation_player.get_animation_list()
+	var target := ""
+	for n in names:
+		var lower := str(n).to_lower()
+		if kind == "idle" and ("idle" in lower or "stand" in lower):
+			target = str(n); break
+		if kind == "walk" and ("walk" in lower or "run" in lower or "move" in lower):
+			target = str(n); break
+		if kind == "attack" and ("attack" in lower or "zombie attack" in lower):
+			target = str(n); break
+		if kind == "death" and ("death" in lower or "dying" in lower or "die" in lower):
+			target = str(n); break
+	if target.is_empty() and names.size() > 0:
+		target = str(names[0])
+	if not target.is_empty():
+		animation_player.play(target)
 
 func apply_damage(amount: float) -> void:
 	if dead:
@@ -133,6 +191,7 @@ func apply_damage(amount: float) -> void:
 	arena.call("show_damage_number", global_position + Vector3.UP * 1.6, amount, false)
 	if health <= 0.0:
 		dead = true
+		_play_monster_animation("death")
 		GameAudio.play_sfx("monster_death")
 		set_physics_process(false)
 		collision_shape.set_deferred("disabled", true)
@@ -197,7 +256,12 @@ func _physics_process(delta: float) -> void:
 		rotation.y = lerp_angle(rotation.y, target_yaw, 1.0 - exp(-8.0 * delta))
 	if distance <= ATTACK_RANGE and attack_timer == 0.0:
 		attack_timer = 1.25
+		_play_monster_animation("attack")
 		player.take_damage(float(monster_data["attack"]))
+	if movement_intent.length_squared() > 0.01:
+		_play_monster_animation("walk")
+	else:
+		_play_monster_animation("idle")
 
 	var moved := global_position.distance_to(last_position)
 	if movement_intent.length_squared() > 0.01 and moved < 0.015:
