@@ -62,7 +62,7 @@ func _build_visuals() -> void:
 			var model := packed.instantiate() as Node3D
 			if model != null:
 				model.name = "MonsterModel"
-				model.scale = Vector3.ONE * size * 10.0
+				model.scale = Vector3.ONE * size
 				add_child(model)
 				model_root = model
 				body_mesh = model as MeshInstance3D
